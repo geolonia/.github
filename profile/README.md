@@ -1,12 +1,12 @@
 ## Welcome to Geolonia 👋
 
-<!--
+Connecting the physical and digital worlds to create an open & inclusive society.
 
-**Here are some ideas to get you started:**
+物理世界とデジタル世界をリンクし、オープンでフラットな社会を目指します。
 
-🙋‍♀️ A short introduction - what is your organization all about?
-🌈 Contribution guidelines - how can the community get involved?
-👩‍💻 Useful resources - where can the community find your docs? Is there anything else the community should know?
-🍿 Fun facts - what does your team eat for breakfast?
-🧙 Remember, you can do mighty things with the power of [Markdown](https://docs.github.com/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
--->
+### Useful Links / リンク集
+
+- [Geolonia Website / 公式サイト](https://www.geolonia.com/)
+- [Documentation / ドキュメント](https://docs.geolonia.com/)
+- [Staff Blog / スタッフブログ](https://blog.geolonia.com/)
+- [Contact / お問い合わせ](https://www.geolonia.com/contact/)
