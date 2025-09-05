@@ -9,7 +9,9 @@ body:
     id: what-happened
     attributes:
       label: What happened?
-      description: Also tell us, what did you expect to happen? \nIf applicable, add screenshots to help explain your problem.
+      description: |
+        Also tell us, what did you expect to happen?
+        If applicable, add screenshots to help explain your problem.
       placeholder: Tell us what happened!
     validations:
       required: true
@@ -17,8 +19,7 @@ body:
     id: steps-to-reproduce
     attributes:
       label: Steps to reproduce
-      description: Please list the steps to reproduce the bug.
-      placeholder: The steps to reproduce the bug.
+      placeholder: Please list the steps to reproduce the bug.
   - type: textarea
     id: logs
     attributes:
