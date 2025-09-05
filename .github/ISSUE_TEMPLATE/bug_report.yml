@@ -19,6 +19,7 @@ body:
     id: steps-to-reproduce
     attributes:
       label: Steps to reproduce
+      description: If possible, please provide a minimal set of steps to reproduce the bug.
       placeholder: Please list the steps to reproduce the bug.
   - type: textarea
     id: logs
