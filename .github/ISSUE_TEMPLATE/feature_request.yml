@@ -1,0 +1,40 @@
+name: Feature Request
+description: Suggest an idea for this project.
+title: "[Feature]: "
+labels: []
+type: feature
+projects: []
+assignees: []
+body:
+  - type: textarea
+    id: what-you-want
+    attributes:
+      label: What do you want?
+      description: Please describe the feature you want to request in as much detail as possible.
+      placeholder: Tell us what you want!
+    validations:
+      required: true
+  - type: textarea
+    id: why-you-want-it
+    attributes:
+      label: Why do you want it?
+      description: Please explain why you want this feature and how it would help you.
+      placeholder: Tell us why you want it!
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: If applicable, please describe any alternative solutions or features you have considered.
+      placeholder: Tell us about any alternatives you have considered.
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Please provide any additional context or information that may be relevant to your feature request.
+      placeholder: Add any other context or screenshots about the feature request here.
+    validations:
+      required: false
