@@ -13,6 +13,6 @@ metadata:
     - github
     - workflows
 spec:
-  type: devops
+  type: infrastructure
   lifecycle: production
   owner: group:geolonia/operations
