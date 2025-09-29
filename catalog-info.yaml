@@ -16,3 +16,4 @@ spec:
   type: infrastructure
   lifecycle: production
   owner: group:geolonia/operations
+  system: geolonia/governance  
