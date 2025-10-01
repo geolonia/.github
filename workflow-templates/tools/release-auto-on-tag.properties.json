@@ -1,0 +1,6 @@
+{
+  "name": "Geolonia Release (auto on vX.Y.Z tag)",
+  "description": "When a tag like v1.2.3 is pushed, create a GitHub Release and move the v1 and v1.2 tags to that commit.",
+  "iconName": "rocket",
+  "categories": ["Automation", "Deployment"]
+}
