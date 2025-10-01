@@ -1,0 +1,67 @@
+name: Geolonia Release (auto on vX.Y.Z tag)
+
+on:
+  push:
+    # Only run when a 3-part semver tag is pushed, e.g. v1.2.3
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write   # needed for pushing/moving tags and creating releases
+
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create release & move major/minor tags
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Parse tag (semver)
+        id: semver
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"     # e.g. v1.2.3
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Not a plain semver tag (vX.Y.Z): $TAG"
+            exit 1
+          fi
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "major=v$MAJOR"    >> "$GITHUB_OUTPUT"
+          echo "minor=v$MAJOR.$MINOR" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (if missing)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.semver.outputs.tag }}
+          name: ${{ steps.semver.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ steps.semver.outputs.is_prerelease }}
+
+      - name: Move/update MINOR tag (vX.Y) to this release
+        shell: bash
+        run: |
+          MINOR="${{ steps.semver.outputs.minor }}"
+          TAG="${{ steps.semver.outputs.tag }}"
+          git tag -f "$MINOR" "$TAG"
+          git push -f origin "$MINOR"
+
+      - name: Move/update MAJOR tag (vX) to this release
+        shell: bash
+        run: |
+          MAJOR="${{ steps.semver.outputs.major }}"
+          TAG="${{ steps.semver.outputs.tag }}"
+          git tag -f "$MAJOR" "$TAG"
+          git push -f origin "$MAJOR"
