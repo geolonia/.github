@@ -9,6 +9,7 @@ metadata:
     CODEOWNERS, and policies for the Geolonia org.
   annotations:
     github.com/project-slug: geolonia/.github
+    backstage.io/techdocs-ref: dir:.
   tags:
     - github
     - workflows
@@ -16,4 +17,4 @@ spec:
   type: infrastructure
   lifecycle: production
   owner: group:geolonia/operations
-  system: geolonia/governance  
+  system: geolonia/governance
