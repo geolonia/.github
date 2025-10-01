@@ -1,0 +1,37 @@
+name: Publish TechDocs
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    uses: geolonia/.github-private/.github/workflows/backstage/techdocs.yml@v1
+    with:
+      # Minimal, safe defaults (feel free to tweak):
+      environment: production
+      aws_region: ap-northeast-1
+
+      # Optional overrides — uncomment and adjust if needed:
+      # tag: ${{ github.sha }}
+
+      # Tool/runtime overrides:
+      # node_version: "24"
+      # python_version: "3.13"
+      # techdocs_cli_version: "latest"
+      # mkdocs_core_version: ">=1.6,<2.0"
+
+      # Publishing overrides (prefer vars; see below):
+      # techdocs_bucket: ${{ vars.TECHDOCS_BUCKET }}    # e.g., example-backstage-techdocs-bucket
+      # techdocs_entity: <namespace>/<component>/${{ github.event.repository.name }}
+      # build_directory: "site"
+
+      # AWS role override (rare):
+      # aws_role_arn: arn:aws:iam::123456789012:role/CustomTechDocsRole
+
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
