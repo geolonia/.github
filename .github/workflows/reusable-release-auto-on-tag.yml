@@ -1,0 +1,115 @@
+name: Geolonia Release (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      move_major_tag:
+        description: "Update MAJOR tag (vX)"
+        type: boolean
+        required: false
+        default: true
+      move_minor_tag:
+        description: "Update MINOR tag (vX.Y)"
+        type: boolean
+        required: false
+        default: true
+      generate_release_notes:
+        description: "Auto-generate release notes"
+        type: boolean
+        required: false
+        default: true
+      prerelease:
+        description: "Mark the GitHub Release as prerelease"
+        type: boolean
+        required: false
+        default: false
+      tag_pattern:
+        description: "Regex for tag names (must capture MAJOR, MINOR, PATCH)"
+        type: string
+        required: false
+        default: '^v([0-9]+)\.([0-9]+)\.([0-9]+)$'
+      # Rare/manual use: override the tag ref name (e.g., 'v1.2.3') instead of github.ref_name
+      tag_override:
+        description: "Explicit tag name to process (normally inferred from the push event)"
+        type: string
+        required: false
+        default: ""
+    outputs:
+      tag:
+        description: "Full tag (e.g. v1.2.3)"
+        value: ${{ jobs.release.outputs.tag }}
+      major:
+        description: "Major tag (e.g. v1)"
+        value: ${{ jobs.release.outputs.major }}
+      minor:
+        description: "Minor tag (e.g. v1.2)"
+        value: ${{ jobs.release.outputs.minor }}
+
+permissions:
+  contents: write   # needed to push/move tags and create releases
+
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create release & move major/minor tags
+    runs-on: ubuntu-latest
+    outputs:
+      tag:   ${{ steps.semver.outputs.tag }}
+      major: ${{ steps.semver.outputs.major }}
+      minor: ${{ steps.semver.outputs.minor }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Parse tag (semver)
+        id: semver
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag_override != '' && inputs.tag_override || github.ref_name }}"
+          PATTERN="${{ inputs.tag_pattern }}"
+          if [[ ! "$TAG" =~ $PATTERN ]]; then
+            echo "Tag '$TAG' does not match expected pattern: $PATTERN"
+            exit 1
+          fi
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "major=v$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "minor=v$MAJOR.$MINOR" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (idempotent)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.semver.outputs.tag }}
+          name:     ${{ steps.semver.outputs.tag }}
+          generate_release_notes: ${{ inputs.generate_release_notes }}
+          prerelease:             ${{ inputs.prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move/update MINOR tag (vX.Y)
+        if: ${{ inputs.move_minor_tag }}
+        shell: bash
+        run: |
+          MINOR="${{ steps.semver.outputs.minor }}"
+          TAG="${{ steps.semver.outputs.tag }}"
+          git tag -f "$MINOR" "$TAG"
+          git push -f origin "$MINOR"
+
+      - name: Move/update MAJOR tag (vX)
+        if: ${{ inputs.move_major_tag }}
+        shell: bash
+        run: |
+          MAJOR="${{ steps.semver.outputs.major }}"
+          TAG="${{ steps.semver.outputs.tag }}"
+          git tag -f "$MAJOR" "$TAG"
+          git push -f origin "$MAJOR"
