@@ -10,7 +10,7 @@ on:
 
 jobs:
   publish:
-    uses: geolonia/.github-private/.github/workflows/backstage/techdocs.yml@v1
+    uses: geolonia/.github-private/.github/workflows/backstage-techdocs.yml@v1
     with:
       environment: production
       aws_region: ap-northeast-1
