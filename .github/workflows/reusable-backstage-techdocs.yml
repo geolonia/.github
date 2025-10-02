@@ -1,0 +1,124 @@
+name: Publish TechDocs (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      # --- Common fields (all optional) ---
+      tag:
+        description: "Tag/SHA to build docs from (defaults to current ref)"
+        required: false
+        type: string
+      environment:
+        description: "GitHub environment to deploy to (defaults to 'production')"
+        required: false
+        type: string
+
+      # --- Runtime/tooling versions ---
+      node_version:
+        description: "Node.js version"
+        required: false
+        type: string
+      python_version:
+        description: "Python version for mkdocs"
+        required: false
+        type: string
+      techdocs_cli_version:
+        description: "@techdocs/cli version (npm tag or semver)"
+        required: false
+        type: string
+      mkdocs_core_version:
+        description: "mkdocs-techdocs-core version range"
+        required: false
+        type: string
+
+      # --- AWS / Publishing ---
+      aws_region:
+        description: "AWS region for publishing"
+        required: false
+        type: string
+      techdocs_bucket:
+        description: "S3 bucket for TechDocs"
+        required: false
+        type: string
+      techdocs_entity:
+        description: "Backstage entity triplet <namespace>/<kind>/<name>"
+        required: false
+        type: string
+      aws_role_arn:
+        description: "Role to assume; if empty, builds ARN from AWS_ACCOUNT_ID"
+        required: false
+        type: string
+      build_directory:
+        description: "Directory with generated TechDocs site"
+        required: false
+        type: string
+
+    secrets:
+      AWS_ACCOUNT_ID:
+        description: "Account ID (used to build default role ARN)"
+        required: true
+
+env:
+  # ---- Cascading defaults: inputs -> vars -> opinionated constant ----
+  NODE_VERSION:     ${{ inputs.node_version || vars.TECHDOCS_NODE_VERSION || '24' }}
+  PYTHON_VERSION:   ${{ inputs.python_version || vars.TECHDOCS_PYTHON_VERSION || '3.13' }}
+  TECHDOCS_CLI_VER: ${{ inputs.techdocs_cli_version || vars.TECHDOCS_CLI_VERSION || 'latest' }}
+  MKDOCS_CORE_VER:  ${{ inputs.mkdocs_core_version || vars.MKDOCS_TECHDOCS_CORE_VERSION || '>=1.6,<2.0' }}
+
+  AWS_REGION:       ${{ inputs.aws_region || vars.AWS_REGION || 'ap-northeast-1' }}
+  AWS_ACCOUNT_ID:   ${{ secrets.AWS_ACCOUNT_ID }}
+
+  TECHDOCS_BUCKET:  ${{ inputs.techdocs_bucket || vars.TECHDOCS_BUCKET || 'geolonia-backstage-techdocs' }}
+  TECHDOCS_ENTITY:  ${{ inputs.techdocs_entity || vars.TECHDOCS_ENTITY || format('geolonia/component/{0}', github.event.repository.name) }}
+
+  BUILD_DIR:        ${{ inputs.build_directory || vars.TECHDOCS_BUILD_DIR || 'site' }}
+
+jobs:
+  publish-techdocs:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || vars.TECHDOCS_ENVIRONMENT || 'production' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install TechDocs CLI
+        run: npm i -g @techdocs/cli@${{ env.TECHDOCS_CLI_VER }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install MkDocs + TechDocs core
+        run: |
+          python -m pip install --upgrade pip
+          pip install "mkdocs-techdocs-core${{ env.MKDOCS_CORE_VER }}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn != '' && inputs.aws_role_arn || format('arn:aws:iam::{0}:role/GitHubActionsTechDocsPublisher', env.AWS_ACCOUNT_ID) }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Generate TechDocs (no Docker)
+        run: techdocs-cli generate --no-docker --verbose
+
+      - name: Publish to S3
+        run: |
+          techdocs-cli publish \
+            --publisher-type awsS3 \
+            --storage-name "${TECHDOCS_BUCKET}" \
+            --entity "${TECHDOCS_ENTITY}" \
+            --directory "./${BUILD_DIR}"
