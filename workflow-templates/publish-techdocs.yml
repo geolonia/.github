@@ -10,7 +10,7 @@ on:
 
 jobs:
   publish:
-    uses: geolonia/.github-private/.github/workflows/backstage/techdocs.yml@v1
+    uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@v1
     with:
       # Minimal, safe defaults (feel free to tweak):
       environment: production
