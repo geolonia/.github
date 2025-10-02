@@ -1,4 +1,4 @@
-name: Publish TechDocs (Reusable)
+name: "[REUSABLE] Publish TechDocs"
 
 on:
   workflow_call:

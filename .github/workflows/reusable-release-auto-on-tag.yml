@@ -1,4 +1,4 @@
-name: Geolonia Release (Reusable)
+name: "[REUSABLE] Geolonia Release"
 
 on:
   workflow_call:
