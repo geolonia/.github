@@ -14,7 +14,7 @@ metadata:
     - github
     - workflows
 spec:
-  type: infrastructure
+  type: library
   lifecycle: production
   owner: group:geolonia/operations
   system: geolonia/standards
