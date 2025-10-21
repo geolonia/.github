@@ -83,6 +83,11 @@ jobs:
       contents: read
 
     steps:
+      - name: Workaround cache path bug
+        run: |
+          mkdir -p ~/.npm
+          mkdir -p ~/.cache/pip
+    
       - name: Checkout
         uses: actions/checkout@v5
         with:
