@@ -1,6 +1,6 @@
 site_name: Public Organization Profile Docs
-nav:
-  - Home: index.md
+# nav:
+#   - Home: index.md
 docs_dir: docs
 theme:
   name: material
