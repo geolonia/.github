@@ -44,6 +44,11 @@ on:
       minor:
         description: "Minor tag (e.g. v1.2)"
         value: ${{ jobs.release.outputs.minor }}
+    secrets:
+      WORKFLOWS_APP_ID:
+        required: true
+      WORKFLOWS_APP_PRIVATE_KEY:
+        required: true
 
 permissions:
   contents: write   # needed to push/move tags and create releases
@@ -100,7 +105,7 @@ jobs:
         id: app_token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.WORKFLOWS_APP_ID }}
+          app-id: ${{ secrets.WORKFLOWS_APP_ID }}
           private-key: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
 
       - name: Use App token for pushes
