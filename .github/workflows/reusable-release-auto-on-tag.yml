@@ -96,6 +96,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate GitHub App token
+        id: app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.WORKFLOWS_APP_ID }}
+          private-key: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
+
+      - name: Use App token for pushes
+        run: |
+          git remote set-url origin "https://x-access-token:${{ steps.app_token.outputs.token }}@github.com/${{ github.repository }}.git"
+          git config user.name  "geolonia-release[app]"
+          git config user.email "geolonia-release[app]@users.noreply.github.com"
+
       - name: Move/update MINOR tag (vX.Y)
         if: ${{ inputs.move_minor_tag }}
         shell: bash
@@ -103,7 +116,7 @@ jobs:
           MINOR="${{ steps.semver.outputs.minor }}"
           TAG="${{ steps.semver.outputs.tag }}"
           git tag -f "$MINOR" "$TAG"
-          git push -f origin "$MINOR"
+          git push --force-with-lease origin "$MINOR"
 
       - name: Move/update MAJOR tag (vX)
         if: ${{ inputs.move_major_tag }}
@@ -112,4 +125,4 @@ jobs:
           MAJOR="${{ steps.semver.outputs.major }}"
           TAG="${{ steps.semver.outputs.tag }}"
           git tag -f "$MAJOR" "$TAG"
-          git push -f origin "$MAJOR"
+          git push --force-with-lease origin "$MAJOR"
