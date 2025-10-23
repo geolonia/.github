@@ -132,5 +132,6 @@ jobs:
         run: |
           MAJOR="${{ steps.semver.outputs.major }}"
           TAG="${{ steps.semver.outputs.tag }}"
+          git fetch --tags --prune --force origin
           git tag -f "$MAJOR" "$TAG"
           git push --force-with-lease origin "$MAJOR"
