@@ -7,10 +7,8 @@ on:
 
 jobs:
   publish:
-    uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@main
-    secrets:
-      WORKFLOWS_APP_ID: ${{ secrets.WORKFLOWS_APP_ID }}
-      WORKFLOWS_APP_PRIVATE_KEY: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
+    uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@v1
+    secrets: inherit
     # Optional settings (uncomment to override defaults):
     # with:
     #   move_major_tag: true
