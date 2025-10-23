@@ -122,6 +122,7 @@ jobs:
         run: |
           MINOR="${{ steps.semver.outputs.minor }}"
           TAG="${{ steps.semver.outputs.tag }}"
+          git fetch --tags --prune origin
           git tag -f "$MINOR" "$TAG"
           git push --force-with-lease origin "$MINOR"
 
