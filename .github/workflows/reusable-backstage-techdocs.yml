@@ -92,9 +92,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: ''
-  
+          package-manager-cache: false
+
       - name: Install TechDocs CLI
         run: npm i -g @techdocs/cli@${{ env.TECHDOCS_CLI_VER }}
 
