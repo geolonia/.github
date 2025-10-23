@@ -122,9 +122,8 @@ jobs:
         run: |
           MINOR="${{ steps.semver.outputs.minor }}"
           TAG="${{ steps.semver.outputs.tag }}"
-          git fetch --tags --prune --force origin
           git tag -f "$MINOR" "$TAG"
-          git push --force-with-lease origin "$MINOR"
+          git push -f origin "$MINOR"
 
       - name: Move/update MAJOR tag (vX)
         if: ${{ inputs.move_major_tag }}
@@ -132,6 +131,5 @@ jobs:
         run: |
           MAJOR="${{ steps.semver.outputs.major }}"
           TAG="${{ steps.semver.outputs.tag }}"
-          git fetch --tags --prune --force origin
           git tag -f "$MAJOR" "$TAG"
-          git push --force-with-lease origin "$MAJOR"
+          git push -f origin "$MAJOR"
