@@ -83,11 +83,6 @@ jobs:
       contents: read
 
     steps:
-      - name: Workaround cache path bug
-        run: |
-          mkdir -p ~/.npm
-          mkdir -p ~/.cache/pip
-    
       - name: Checkout
         uses: actions/checkout@v5
         with:
@@ -97,7 +92,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-
+          cache: 'npm'
+          cache-dependency-path: ''
+  
       - name: Install TechDocs CLI
         run: npm i -g @techdocs/cli@${{ env.TECHDOCS_CLI_VER }}
 
