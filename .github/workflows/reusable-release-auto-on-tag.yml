@@ -46,8 +46,10 @@ on:
         value: ${{ jobs.release.outputs.minor }}
     secrets:
       WORKFLOWS_APP_ID:
+        description: "GitHub App ID for pushing tags"
         required: true
       WORKFLOWS_APP_PRIVATE_KEY:
+        description: "GitHub App private key for pushing tags"
         required: true
 
 permissions:
