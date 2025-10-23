@@ -8,6 +8,7 @@ on:
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@v1
+    secrets: inherit
     # Optional settings (uncomment to override defaults):
     # with:
     #   move_major_tag: true
