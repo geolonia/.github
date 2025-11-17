@@ -4,6 +4,22 @@ Workflow templates in `workflow-templates/` appear in GitHub’s “New workflow
 picker for Geolonia repos. They call the reusable workflows hosted in this repo
 under `.github/workflows/`.
 
+## Why two workflow locations?
+
+GitHub displayes templates in`workflow-templates/` to users, but the logic lives
+in `.github/workflows/`. Templates point to tagged reusable workflows so that
+repos making use of them can pin a version and avoid breakage from changes on `main`.
+
+| Role | Example | Purpose |
+| --- | --- | --- |
+| Template | `workflow-templates/publish-techdocs.yml` | Shown in “New workflow”; references a tagged reusable workflow (e.g., `.../reusable-backstage-techdocs.yml@v1`). |
+| Entrypoint | `.github/workflows/publish-techdocs.yml` | Listens to triggers (push, tag) and forwards to the reusable workflow with defaults. |
+| Reusable | `.github/workflows/reusable-backstage-techdocs.yml` | Contains the logic; callable from other repos pinned by tag (`@v1`, SHA). |
+
+Pinning to tags prevents breakage in repos making use of them. When a breaking
+change is needed, publish a new tag (e.g., `v2.1.0`) so repositories can upgrade
+on their own schedule.
+
 ## Publish TechDocs (`publish-techdocs.yml`)
 
 - Runs on `main` when `docs/**` or `mkdocs.yml` changes, or manually via `workflow_dispatch`.
