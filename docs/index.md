@@ -7,7 +7,7 @@ keep organization-wide defaults in one place and reduce duplication across proje
 
 - Organization profile content in `profile/` shown on the GitHub org page
 - Community health files (Code of Conduct, contributing, support, security)
-- Shared pull request template
+- Issue and pull request templates
 - Workflow templates for publishing TechDocs and shipping tagged releases
 
 **Note**: This repo is named `.github` to leverage GitHub's special handling of this
