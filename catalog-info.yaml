@@ -18,3 +18,25 @@ spec:
   lifecycle: production
   owner: group:geolonia/operations
   system: geolonia/standards
+  dependsOn:
+    - resource:geolonia/github-workflow-templates
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  namespace: geolonia
+  name: github-workflow-templates
+  title: GitHub Workflow Templates
+  description: Reusable GitHub Actions templates for TechDocs publishing and automated releases.
+  tags:
+    - github-actions
+    - workflows
+  links:
+    - url: https://github.com/geolonia/.github/tree/main/workflow-templates
+      title: Workflow templates
+      icon: github
+spec:
+  type: workflow-template
+  owner: group:geolonia/operations
+  system: geolonia/standards

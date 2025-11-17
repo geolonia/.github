@@ -1,6 +1,9 @@
 site_name: Public Organization Profile Docs
-# nav:
-#   - Home: index.md
+nav:
+  - Overview: index.md
+  - Community Health: community-health.md
+  - Workflows: workflows.md
+  - Organization Profile: profile.md
 docs_dir: docs
 theme:
   name: material

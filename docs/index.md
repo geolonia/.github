@@ -1,25 +1,21 @@
-# Public Organization Profile Docs
+# Geolonia `.github` Repository
 
-Welcome to the documentation for the Public Organization Profile repository.
-This repository contains resources and information about our public organization
-profile, including guidelines, policies, and other relevant documentation.
+This repository holds Geolonia’s shared GitHub assets and policies. Use it to
+keep organization-wide defaults in one place and reduce duplication across projects.
 
-## Public Profile
+## What lives here
 
-TBD
+- Organization profile content in `profile/` shown on the GitHub org page
+- Community health files (Code of Conduct, contributing, support, security)
+- Shared pull request template
+- Workflow templates for publishing TechDocs and shipping tagged releases
 
-## Issue Templates
+**Note**: This repo is named `.github` to leverage GitHub's special handling of this
+repository and **it must remain public**. Take care not to include any sensitive
+information here.
 
-TBD
+## Related pages
 
-## Reusable Workflows
-
-TBD
-
-## Workflow Templates
-
-TBD
-
-## Release Process
-
-TBD
+- [Community health](community-health.md)
+- [Reusable workflows](workflows.md)
+- [Organization profile](profile.md)
