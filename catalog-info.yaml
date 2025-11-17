@@ -20,6 +20,7 @@ spec:
   system: geolonia/standards
   dependsOn:
     - resource:geolonia/github-workflow-templates
+    - resource:geolonia/github-issue-templates
 
 ---
 apiVersion: backstage.io/v1alpha1
@@ -38,5 +39,28 @@ metadata:
       icon: github
 spec:
   type: workflow-template
+  owner: group:geolonia/operations
+  system: geolonia/standards
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  namespace: geolonia
+  name: github-issue-templates
+  title: GitHub Issue & PR Templates
+  description: Shared issue forms and pull request template applied org-wide.
+  tags:
+    - github
+    - templates
+  links:
+    - url: https://github.com/geolonia/.github/tree/main/.github/ISSUE_TEMPLATE
+      title: Issue templates
+      icon: github
+    - url: https://github.com/geolonia/.github/blob/main/.github/pull_request_template.md
+      title: Pull request template
+      icon: github
+spec:
+  type: template
   owner: group:geolonia/operations
   system: geolonia/standards
