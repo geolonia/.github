@@ -38,7 +38,7 @@ metadata:
       title: Workflow templates
       icon: github
 spec:
-  type: workflow-template
+  type: template
   owner: group:geolonia/operations
   system: geolonia/standards
 
