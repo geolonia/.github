@@ -39,6 +39,7 @@ metadata:
       icon: github
 spec:
   type: template
+  lifecycle: production
   owner: group:geolonia/operations
   system: geolonia/standards
 
@@ -62,5 +63,6 @@ metadata:
       icon: github
 spec:
   type: template
+  lifecycle: production
   owner: group:geolonia/operations
   system: geolonia/standards
