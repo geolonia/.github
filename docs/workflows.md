@@ -25,8 +25,8 @@ on their own schedule.
 - Runs on `main` when `docs/**` or `mkdocs.yml` changes, or manually via `workflow_dispatch`.
 - Delegates to `reusable-backstage-techdocs.yml@v1` with safe defaults for AWS
   region, environment, and tool versions.
-- Requires `AWS_ACCOUNT_ID` in repo secrets; S3 bucket/role overrides can be
-  passed through vars or workflow inputs if needed.
+- Requires `TECHDOCS_AWS_ACCOUNT_ID` in repo secrets; S3 bucket/role overrides
+  can be passed through vars or workflow inputs if needed.
 
 Example minimal usage after selecting the template:
 

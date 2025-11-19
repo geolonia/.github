@@ -17,4 +17,4 @@ jobs:
       techdocs_bucket: ${{ vars.TECHDOCS_BUCKET }}
       techdocs_entity: ${{ vars.TECHDOCS_ENTITY }}
     secrets:
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}

@@ -34,4 +34,4 @@ jobs:
       # aws_role_arn: arn:aws:iam::123456789012:role/CustomTechDocsRole
 
     secrets:
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
