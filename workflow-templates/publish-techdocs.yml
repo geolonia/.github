@@ -33,5 +33,7 @@ jobs:
       # AWS role override (rare):
       # aws_role_arn: arn:aws:iam::123456789012:role/CustomTechDocsRole
 
+    # Inherit org/repo secrets; override by defining AWS_ACCOUNT_ID in the calling repo if needed.
     secrets:
-      AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
+      inherit: true
+      # AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
