@@ -110,7 +110,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ inputs.aws_role_arn != '' && inputs.aws_role_arn || format('arn:aws:iam::{0}:role/GitHubActionsTechDocsPublisher', env.AWS_ACCOUNT_ID) }}
+          role-to-assume: ${{ inputs.aws_role_arn != '' && inputs.aws_role_arn || format('arn:aws:iam::{0}:role/GitHubActionsTechDocsPublisher', secrets.TECHDOCS_AWS_ACCOUNT_ID) }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Generate TechDocs (no Docker)
