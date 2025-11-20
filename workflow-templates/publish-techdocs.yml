@@ -11,12 +11,10 @@ on:
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@v1
+    secrets: inherit
+    # optional inputs can be specified here to override defaults
     # with:
     #   environment: production
     #   aws_region: ap-northeast-1
     #   techdocs_bucket: ${{ vars.TECHDOCS_BUCKET }}
     #   techdocs_entity: ${{ vars.TECHDOCS_ENTITY }}
-
-    secrets:
-      inherit: true
-    #   AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
