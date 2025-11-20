@@ -25,8 +25,9 @@ on their own schedule.
 - Runs on `main` when `docs/**` or `mkdocs.yml` changes, or manually via `workflow_dispatch`.
 - Delegates to `reusable-backstage-techdocs.yml@v1` with safe defaults for AWS
   region, environment, and tool versions.
-- Requires `TECHDOCS_AWS_ACCOUNT_ID` in repo secrets; S3 bucket/role overrides
-  can be passed through vars or workflow inputs if needed.
+- Inherits org-level `TECHDOCS_AWS_ACCOUNT_ID` by default; set a repo secret
+  `AWS_ACCOUNT_ID` to override per-repo; role/bucket overrides can be passed via
+  vars or workflow inputs.
 
 Example minimal usage after selecting the template:
 
@@ -34,11 +35,13 @@ Example minimal usage after selecting the template:
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@v1
-    with:
-      environment: production
-      aws_region: ap-northeast-1
-    secrets:
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+    # Optional repo override:
+    # with:
+    #   environment: production
+    #   aws_region: ap-northeast-1
+    secrets: 
+      inherit: true
+    # AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
 ```
 
 ## Release on Tag (`release-auto-on-tag.yml`)
