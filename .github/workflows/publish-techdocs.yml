@@ -11,4 +11,3 @@ on:
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@v1
-    secrets: inherit
