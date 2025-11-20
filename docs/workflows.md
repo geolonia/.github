@@ -39,6 +39,8 @@ jobs:
     # with:
     #   environment: production
     #   aws_region: ap-northeast-1
+    secrets: inherit
+    # In case you want to override the AWS account ID:
     # secrets: 
     #   AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
 ```
@@ -57,6 +59,7 @@ Example minimal usage:
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@v1
+    secrets: inherit
 ```
 
 ## Updating templates
