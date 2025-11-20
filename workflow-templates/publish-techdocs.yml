@@ -17,5 +17,6 @@ jobs:
     #   techdocs_bucket: ${{ vars.TECHDOCS_BUCKET }}
     #   techdocs_entity: ${{ vars.TECHDOCS_ENTITY }}
 
-    # secrets:
+    secrets:
+      inherit: true
     #   AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
