@@ -63,18 +63,19 @@ on:
 
 env:
   # ---- Cascading defaults: inputs -> vars -> opinionated constant ----
-  NODE_VERSION:     ${{ inputs.node_version || vars.TECHDOCS_NODE_VERSION || '24' }}
-  PYTHON_VERSION:   ${{ inputs.python_version || vars.TECHDOCS_PYTHON_VERSION || '3.13' }}
-  TECHDOCS_CLI_VER: ${{ inputs.techdocs_cli_version || vars.TECHDOCS_CLI_VERSION || 'latest' }}
-  MKDOCS_CORE_VER:  ${{ inputs.mkdocs_core_version || vars.MKDOCS_TECHDOCS_CORE_VERSION || '>=1.6,<2.0' }}
+  NODE_VERSION:           ${{ inputs.node_version || vars.TECHDOCS_NODE_VERSION || '24' }}
+  PYTHON_VERSION:         ${{ inputs.python_version || vars.TECHDOCS_PYTHON_VERSION || '3.13' }}
+  TECHDOCS_CLI_VER:       ${{ inputs.techdocs_cli_version || vars.TECHDOCS_CLI_VERSION || 'latest' }}
+  MKDOCS_CORE_VER:        ${{ inputs.mkdocs_core_version || vars.MKDOCS_TECHDOCS_CORE_VERSION || '>=1.6,<2.0' }}
 
-  AWS_REGION:       ${{ inputs.aws_region || vars.AWS_REGION || 'ap-northeast-1' }}
-  AWS_ACCOUNT_ID:   ${{ secrets.AWS_ACCOUNT_ID || secrets.TECHDOCS_AWS_ACCOUNT_ID }}
+  AWS_REGION:             ${{ inputs.aws_region || vars.AWS_REGION || 'ap-northeast-1' }}
+  AWS_ACCOUNT_ID:         ${{ secrets.AWS_ACCOUNT_ID || secrets.TECHDOCS_AWS_ACCOUNT_ID }}
 
-  TECHDOCS_BUCKET:  ${{ inputs.techdocs_bucket || vars.TECHDOCS_BUCKET || 'geolonia-backstage-techdocs' }}
-  TECHDOCS_ENTITY:  ${{ inputs.techdocs_entity || vars.TECHDOCS_ENTITY || format('geolonia/component/{0}', github.event.repository.name) }}
+  TECHDOCS_BUCKET:        ${{ inputs.techdocs_bucket || vars.TECHDOCS_BUCKET || 'geolonia-backstage-techdocs' }}
+  TECHDOCS_ENTITY_INPUT:  ${{ inputs.techdocs_entity }}
+  TECHDOCS_ENTITY_VAR:    ${{ vars.TECHDOCS_ENTITY }}
 
-  BUILD_DIR:        ${{ inputs.build_directory || vars.TECHDOCS_BUILD_DIR || 'site' }}
+  BUILD_DIR:              ${{ inputs.build_directory || vars.TECHDOCS_BUILD_DIR || 'site' }}
 
 jobs:
   publish-techdocs:
@@ -109,6 +110,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "mkdocs-techdocs-core${{ env.MKDOCS_CORE_VER }}"
+
+      - name: Resolve TechDocs entity from catalog-info.yaml (fallback)
+        id: techdocs_entity_yaml
+        uses: mikefarah/yq@v4
+        with:
+          # result: "namespace/kind/name" (e.g. "geolonia/component/my-service")
+          cmd: yq -r '[.metadata.namespace // "default", (.kind // "Component" | downcase), .metadata.name] | join("/")' catalog-info.yaml
+
+      - name: Get final TECHDOCS_ENTITY
+        run: |
+          # Precedence:
+          # 1) workflow input
+          # 2) repo/org variable
+          # 3) catalog-info.yaml
+          ENTITY="${TECHDOCS_ENTITY_INPUT:-${TECHDOCS_ENTITY_VAR:-${{ steps.techdocs_entity_yaml.outputs.result }}}}"
+
+          if [ -z "$ENTITY" ]; then
+            echo "ERROR: Could not resolve TECHDOCS_ENTITY (no input, no var, catalog-info.yaml missing metadata.name?)"
+            exit 1
+          fi
+
+          echo "Using TECHDOCS_ENTITY=${ENTITY}"
+          echo "TECHDOCS_ENTITY=${ENTITY}" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
