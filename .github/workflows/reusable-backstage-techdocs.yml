@@ -116,8 +116,8 @@ jobs:
         id: techdocs_entity_yaml
         uses: mikefarah/yq@v4
         with:
-          # result: "namespace/kind/name" (e.g. "geolonia/component/my-service")
-          cmd: yq -r '[.metadata.namespace // "default", (.kind // "Component" | downcase), .metadata.name] | join("/")' catalog-info.yaml
+            # result: "namespace/kind/name" (e.g. "geolonia/component/my-service")
+            cmd: yq -r 'select(.kind == "Component") | [.metadata.namespace // "default", (.kind // "Component" | downcase), .metadata.name] | join("/")' catalog-info.yaml
 
       - name: Get final TECHDOCS_ENTITY
         run: |
@@ -136,7 +136,7 @@ jobs:
           echo "TECHDOCS_ENTITY=${ENTITY}" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ inputs.aws_role_arn != '' && inputs.aws_role_arn || format('arn:aws:iam::{0}:role/GitHubActionsTechDocsPublisher', env.AWS_ACCOUNT_ID) }}
           aws-region: ${{ env.AWS_REGION }}
