@@ -1,0 +1,45 @@
+# Agent Policy
+
+This document defines organization-wide guidance for AI agents working in Geolonia
+repositories. Repository-specific rules may extend this policy but should not
+conflict with it.
+
+Related org docs:
+
+- `docs/context-maintenance.md`
+- `docs/roadmap-workflow.md`
+- `docs/tooling.md`
+
+## Issue-first workflow
+
+- Required for feature/bugfix work that affects user-facing behavior or touches
+  multiple files.
+- Optional for docs, typos, and small single-file refactors.
+- Use the repo issue template if present.
+- Branch naming: `issue-<n>-<slug>` from `main`.
+- Manual merge after checks pass.
+
+Recommended command flow:
+
+```bash
+gh issue create --template issue-first.md --label "<label>"
+git checkout -b issue-<n>-<slug>
+pnpm lint && pnpm test
+gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
+```
+
+## Labels
+
+- Apply labels on issues and PRs (use existing defaults like `bug`,
+  `enhancement`, `documentation`).
+
+## Safety and hygiene
+
+- Never commit secrets or private keys.
+- Avoid destructive git commands unless explicitly requested.
+- Keep changes minimal and aligned with existing patterns.
+
+## Code reviews
+
+- Check for review comments after opening PRs (including Codex and human reviewers).
+- Address feedback promptly and resolve review threads when the change is applied.
