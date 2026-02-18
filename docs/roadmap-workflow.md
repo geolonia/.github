@@ -18,3 +18,9 @@ Use GitHub issues as the source of truth for roadmap items and tasks.
 
 - Use existing defaults: `enhancement`, `bug`, `documentation`.
 - Add phase labels only if milestones are not sufficient.
+
+## Issue Routing
+
+- Create issues in the individual repository where the work is scoped.
+- Issues from all repositories surface in the org-level project board automatically.
+- Do not duplicate issues at the org level; track them once in their home repository.

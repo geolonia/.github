@@ -43,3 +43,9 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 
 - Check for review comments after opening PRs (including Codex and human reviewers).
 - Address feedback promptly and resolve review threads when the change is applied.
+
+## Team communication
+
+- Do not use Slack to request work from or escalate issues to the operations team.
+- Create a GitHub issue in the relevant repository instead and assign it to a team member.
+- Slack is for informal, synchronous conversation only; it is not a task queue.
