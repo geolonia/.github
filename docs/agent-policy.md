@@ -41,8 +41,15 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 
 ## Code reviews
 
-- Check for review comments after opening PRs (including Codex and human reviewers).
-- Address feedback promptly and resolve review threads when the change is applied.
+- After opening a PR, CodeRabbit will post an automated review within a few minutes.
+  Wait for it before asking a human reviewer for approval.
+- Address all CodeRabbit comments. Resolve each thread after applying the fix
+  (or leave a reply explaining why the suggestion was declined).
+- Do not merge until:
+  1. All CI checks pass.
+  2. All CodeRabbit blocking comments are resolved.
+  3. At least one human reviewer has approved.
+- Address human reviewer feedback promptly and resolve threads when the change is applied.
 
 ## Team communication
 
