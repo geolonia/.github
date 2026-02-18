@@ -107,7 +107,16 @@ From the UI: **Actions → select the workflow → Run workflow**.
 ### Reusable workflow not found (`Could not find reusable workflow`)
 
 The caller is likely pinned to a tag that does not exist yet in this repo, or
-the ref has been deleted. Check the tag exists:
+the ref has been deleted. Check whether the tag exists directly:
+
+```bash
+git ls-remote --tags https://github.com/geolonia/.github | grep <tag-name>
+# or via the GitHub API:
+gh api repos/geolonia/.github/git/refs/tags --jq '.[].ref' | grep <tag-name>
+```
+
+As a quick fallback you can also list releases (note: tags and releases are not
+always in sync):
 
 ```bash
 gh release list --repo geolonia/.github --limit 10
