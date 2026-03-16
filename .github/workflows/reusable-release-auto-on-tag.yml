@@ -63,6 +63,8 @@ jobs:
   release:
     name: Create release & move major/minor tags
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
     outputs:
       tag:   ${{ steps.semver.outputs.tag }}
       major: ${{ steps.semver.outputs.major }}
