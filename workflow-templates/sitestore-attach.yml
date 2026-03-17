@@ -1,6 +1,6 @@
-name: Geolonia SiteStore Attach
+name: Publish Site with Geolonia Login
 
-# Attach SiteStore authentication to this repo's CloudFront distribution.
+# Assigns a company domain and enables Geolonia SSO login for this repo's CloudFront distribution.
 # Runs on every push to main and can also be triggered manually.
 #
 # Required repo variable:
