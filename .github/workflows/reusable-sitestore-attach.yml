@@ -95,6 +95,18 @@ jobs:
           echo "client_id=$CLIENT_ID" >> "$GITHUB_OUTPUT"
           echo "ssm_reader_role_arn=$SSM_READER_ROLE_ARN" >> "$GITHUB_OUTPUT"
 
+          # Read client secret from Cognito and store in SSM for Lambda@Edge runtime use.
+          # The secret is not baked into Lambda code; it is read from SSM on each cold start.
+          CLIENT_SECRET=$(aws cognito-idp describe-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" \
+            --client-id "$CLIENT_ID" \
+            --query 'UserPoolClient.ClientSecret' --output text)
+          aws ssm put-parameter \
+            --name /shared/cognito/distribution-client-secret \
+            --value "$CLIENT_SECRET" \
+            --type String \
+            --overwrite
+
           # Register callback URL (idempotent)
           CALLBACK_URL="https://${{ inputs.cloudfront_domain }}/callback"
           EXISTING=$(aws cognito-idp describe-user-pool-client \
