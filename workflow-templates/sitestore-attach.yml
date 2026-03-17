@@ -1,0 +1,23 @@
+name: Geolonia SiteStore Attach
+
+# Attach SiteStore authentication to this repo's CloudFront distribution.
+# Runs on every push to main and can also be triggered manually.
+#
+# Required repo variable:
+#   AWS_DEPLOY_ROLE_ARN   IAM role ARN in the AWS account where the distribution lives
+#
+# Required repo variables (set these to your site's values):
+#   SITESTORE_CF_ORIGIN_DOMAIN   e.g. d1234abcd.cloudfront.net
+#   SITESTORE_CUSTOM_DOMAIN      e.g. my-site.example.com
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  attach:
+    uses: geolonia/.github/.github/workflows/reusable-sitestore-attach.yml@main
+    with:
+      cloudfront_origin_domain: ${{ vars.SITESTORE_CF_ORIGIN_DOMAIN }}
+      custom_domain:            ${{ vars.SITESTORE_CUSTOM_DOMAIN }}
