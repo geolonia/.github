@@ -1,6 +1,0 @@
-{
-  "name": "Publish Site with Geolonia Login",
-  "description": "Assigns a company domain name (e.g. my-site.pages.geolonia.com) to a CloudFront distribution and enables Geolonia SSO login. Runs automatically on every deploy.",
-  "iconName": "shield-lock",
-  "categories": ["Deployment", "AWS"]
-}
