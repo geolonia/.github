@@ -1,10 +1,12 @@
 # Reusable workflow: attach SiteStore Lambda@Edge auth to a CloudFront distribution.
 #
-# SiteStore backend handles: Route53 CNAME, Cognito callback URL registration, SSM config.
-# This workflow handles ONLY the CloudFront side:
-#   1. Deploy the shared Lambda@Edge stack in the target account (idempotent CDK deploy)
-#   2. Provision an ACM wildcard certificate for the subdomain suffix (if not already ISSUED)
+# What this does:
+#   1. Deploy the shared Lambda@Edge stack in the target account (idempotent)
+#   2. Provision an ACM wildcard certificate for the subdomain family (reuses cached cert if available)
 #   3. Attach the custom domain alias, ACM cert, and Lambda@Edge to the CloudFront distribution
+#
+# Prerequisites in the calling repo:
+#   - AWS_DEPLOY_ROLE_ARN set as a repo variable (IAM role with CloudFront + ACM + SSM + CDK permissions)
 #
 # Usage (caller workflow):
 #
@@ -14,7 +16,6 @@
 #       with:
 #         cloudfront_origin_domain: ${{ vars.SITESTORE_CF_ORIGIN_DOMAIN }}
 #         custom_domain:            ${{ vars.SITESTORE_CUSTOM_DOMAIN }}
-#       # No extra secrets needed -- set AWS_DEPLOY_ROLE_ARN as a repo variable in the calling repo
 
 name: "[REUSABLE] Attach SiteStore to CloudFront distribution"
 
@@ -26,11 +27,26 @@ on:
         required: true
         type: string
       custom_domain:
-        description: "Public-facing custom domain (e.g. mysite.pages.geolonia.com)"
+        description: "Public-facing custom domain (e.g. my-site.example.com)"
         required: true
         type: string
       aws_region:
-        description: "AWS region where the CloudFront distribution was created"
+        description: "AWS region where the CloudFront distribution lives"
+        required: false
+        type: string
+        default: "ap-northeast-1"
+  workflow_dispatch:
+    inputs:
+      cloudfront_origin_domain:
+        description: "Raw CloudFront origin domain (e.g. d1234abcd.cloudfront.net)"
+        required: true
+        type: string
+      custom_domain:
+        description: "Public-facing custom domain (e.g. my-site.example.com)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region where the CloudFront distribution lives"
         required: false
         type: string
         default: "ap-northeast-1"
@@ -39,27 +55,23 @@ permissions:
   contents: read
   id-token: write
 
-env:
-  PROD_REGION: "ap-northeast-1"
-  SITESTORE_CONFIG_READER_ROLE: "arn:aws:iam::916205284767:role/SitestoreWorkflowConfigReaderRole"
-
 jobs:
   attach:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout geolonia-distribution-cdk
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           repository: geolonia/geolonia-distribution-cdk
           ref: main
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 24
           cache: pnpm
@@ -69,10 +81,10 @@ jobs:
 
       # Step 1: Read SSM reader role ARN from prod account
       - name: Configure AWS credentials (prod -- read SSM reader role ARN)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
-          role-to-assume: ${{ env.SITESTORE_CONFIG_READER_ROLE }}
-          aws-region: ${{ env.PROD_REGION }}
+          role-to-assume: ${{ vars.SITESTORE_CONFIG_READER_ROLE }}
+          aws-region: ap-northeast-1
 
       - name: Read SSM reader role ARN
         id: prod_config
@@ -84,7 +96,7 @@ jobs:
 
       # Step 2: Deploy shared Lambda@Edge + provision ACM cert (us-east-1)
       - name: Configure AWS credentials (target account -- us-east-1 for Lambda@Edge + ACM)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
@@ -156,10 +168,10 @@ jobs:
       # Step 3: Add DNS validation CNAME in prod Route53 (new certs only)
       - name: Configure AWS credentials (prod -- add validation CNAME)
         if: steps.acm.outputs.needs_validation == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
-          role-to-assume: ${{ env.SITESTORE_CONFIG_READER_ROLE }}
-          aws-region: ${{ env.PROD_REGION }}
+          role-to-assume: ${{ vars.SITESTORE_CONFIG_READER_ROLE }}
+          aws-region: ap-northeast-1
 
       - name: Add ACM validation CNAME to Route53
         if: steps.acm.outputs.needs_validation == 'true'
@@ -189,7 +201,7 @@ jobs:
       # Step 4: Wait for cert to become ISSUED
       - name: Configure AWS credentials (target -- wait for cert validation)
         if: steps.acm.outputs.needs_validation == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
@@ -232,7 +244,7 @@ jobs:
 
       # Step 5: Attach alias + cert + Lambda@Edge to CloudFront
       - name: Configure AWS credentials (target -- update CloudFront distribution)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
