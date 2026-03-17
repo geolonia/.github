@@ -104,7 +104,7 @@ jobs:
           aws cognito-idp update-user-pool-client \
             --user-pool-id "$USER_POOL_ID" --client-id "$CLIENT_ID" \
             --callback-urls "$UPDATED" \
-            --allowed-o-auth-flows authorization_code \
+            --allowed-o-auth-flows code \
             --allowed-o-auth-scopes openid email profile \
             --allowed-o-auth-flows-user-pool-client \
             --supported-identity-providers COGNITO AWSIdentityCenter
