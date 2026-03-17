@@ -1,60 +1,61 @@
-# Reusable workflow: attach SiteStore Lambda@Edge auth to an existing CloudFront distribution.
+# Reusable workflow: attach SiteStore Lambda@Edge auth to a CloudFront distribution.
 #
-# Usage (caller workflow — add to your site repo):
+# SiteStore backend handles: Route53 CNAME, Cognito callback URL registration, SSM config.
+# This workflow handles ONLY the CloudFront side:
+#   1. Deploy the shared Lambda@Edge stack in the target account (idempotent CDK deploy)
+#   2. Provision an ACM wildcard certificate for the subdomain suffix (if not already ISSUED)
+#   3. Attach the custom domain alias, ACM cert, and Lambda@Edge to the CloudFront distribution
+#
+# Usage (caller workflow):
 #
 #   jobs:
 #     attach:
 #       uses: geolonia/.github/.github/workflows/reusable-sitestore-attach.yml@main
 #       with:
-#         distribution_id:   ${{ vars.CF_DISTRIBUTION_ID }}
-#         site_id:           ${{ vars.SITESTORE_SITE_ID }}
-#         cognito_group_id:  ${{ vars.SITESTORE_COGNITO_GROUP_ID }}
-#         cloudfront_domain: ${{ vars.SITESTORE_CF_DOMAIN }}
+#         cloudfront_origin_domain: ${{ vars.SITESTORE_CF_ORIGIN_DOMAIN }}
+#         custom_domain:            ${{ vars.SITESTORE_CUSTOM_DOMAIN }}
+#         subdomain_suffix:         ${{ vars.SITESTORE_SUBDOMAIN_SUFFIX }}
 #       secrets:
 #         aws_deploy_role_arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
 
-name: "[REUSABLE] Attach SiteStore Lambda@Edge to existing CloudFront distribution"
+name: "[REUSABLE] Attach SiteStore to CloudFront distribution"
 
 on:
   workflow_call:
     inputs:
-      distribution_id:
-        description: "CloudFront distribution ID to attach Lambda@Edge to"
+      cloudfront_origin_domain:
+        description: "Raw CloudFront origin domain (e.g. d1234abcd.cloudfront.net)"
         required: true
         type: string
-      site_id:
-        description: "SiteStore site UUID (from SiteStore admin panel)"
+      custom_domain:
+        description: "Public-facing custom domain (e.g. mysite.pages.geolonia.com)"
         required: true
         type: string
-      cognito_group_id:
-        description: "Cognito group ID for this site (from SiteStore admin panel)"
-        required: true
-        type: string
-      cloudfront_domain:
-        description: "Public-facing CloudFront domain (e.g. my-map.demo.geolonia.com)"
+      subdomain_suffix:
+        description: "Subdomain family (pages.geolonia.com | demo.geolonia.com | preview.geolonia.com)"
         required: true
         type: string
       aws_region:
-        description: "AWS region where the CF distribution lives"
+        description: "AWS region where the CloudFront distribution was created"
         required: false
         type: string
         default: "ap-northeast-1"
     secrets:
       aws_deploy_role_arn:
-        description: "IAM role ARN in the target account (must have CloudFront + CFN permissions)"
+        description: "IAM role ARN in the target account (CloudFront + CDK permissions)"
         required: true
 
 permissions:
   contents: read
   id-token: write
 
+env:
+  PROD_REGION: "ap-northeast-1"
+  SITESTORE_CONFIG_READER_ROLE: "arn:aws:iam::916205284767:role/SitestoreWorkflowConfigReaderRole"
+
 jobs:
   attach:
     runs-on: ubuntu-latest
-    env:
-      PROD_REGION: ap-northeast-1
-      SITESTORE_CONFIG_READER_ROLE: arn:aws:iam::916205284767:role/SitestoreWorkflowConfigReaderRole
-
     steps:
       - name: Checkout geolonia-distribution-cdk
         uses: actions/checkout@v4
@@ -76,95 +77,201 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      # Step 1 - Read Cognito config from prod account
-      - name: Configure AWS credentials (prod -- read Cognito config)
+      # Step 1: Read SSM reader role ARN from prod account
+      - name: Configure AWS credentials (prod -- read SSM reader role ARN)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.SITESTORE_CONFIG_READER_ROLE }}
           aws-region: ${{ env.PROD_REGION }}
 
-      - name: Read Cognito config from SSM and register callback URL
-        id: cognito
+      - name: Read SSM reader role ARN
+        id: prod_config
         run: |
-          USER_POOL_ID=$(aws ssm get-parameter --name /shared/cognito/user-pool-id --query Parameter.Value --output text)
-          COGNITO_DOMAIN=$(aws ssm get-parameter --name /shared/cognito/domain --query Parameter.Value --output text)
-          CLIENT_ID=$(aws ssm get-parameter --name /shared/cognito/distribution-client-id --query Parameter.Value --output text)
-          SSM_READER_ROLE_ARN=$(aws ssm get-parameter --name /shared/cognito/ssm-reader-role-arn --query Parameter.Value --output text)
-          echo "user_pool_id=$USER_POOL_ID" >> "$GITHUB_OUTPUT"
-          echo "cognito_domain=$COGNITO_DOMAIN" >> "$GITHUB_OUTPUT"
-          echo "client_id=$CLIENT_ID" >> "$GITHUB_OUTPUT"
-          echo "ssm_reader_role_arn=$SSM_READER_ROLE_ARN" >> "$GITHUB_OUTPUT"
+          SSM_READER_ROLE=$(aws ssm get-parameter \
+            --name /shared/cognito/ssm-reader-role-arn \
+            --query Parameter.Value --output text)
+          echo "ssm_reader_role_arn=$SSM_READER_ROLE" >> "$GITHUB_OUTPUT"
 
-          # Read client secret from Cognito and store in SSM for Lambda@Edge runtime use.
-          # The secret is not baked into Lambda code; it is read from SSM on each cold start.
-          CLIENT_SECRET=$(aws cognito-idp describe-user-pool-client \
-            --user-pool-id "$USER_POOL_ID" \
-            --client-id "$CLIENT_ID" \
-            --query 'UserPoolClient.ClientSecret' --output text)
-          aws ssm put-parameter \
-            --name /shared/cognito/distribution-client-secret \
-            --value "$CLIENT_SECRET" \
-            --type String \
-            --overwrite
-
-          # Register callback URL (idempotent)
-          CALLBACK_URL="https://${{ inputs.cloudfront_domain }}/callback"
-          EXISTING=$(aws cognito-idp describe-user-pool-client \
-            --user-pool-id "$USER_POOL_ID" --client-id "$CLIENT_ID" \
-            --query 'UserPoolClient.CallbackURLs' --output json)
-          UPDATED=$(echo "$EXISTING" | jq --arg url "$CALLBACK_URL" '. + [$url] | unique')
-          aws cognito-idp update-user-pool-client \
-            --user-pool-id "$USER_POOL_ID" --client-id "$CLIENT_ID" \
-            --callback-urls "$UPDATED" \
-            --allowed-o-auth-flows code \
-            --allowed-o-auth-scopes openid email profile \
-            --allowed-o-auth-flows-user-pool-client \
-            --supported-identity-providers COGNITO AWSIdentityCenter
-
-      # Step 2 - Deploy SitestoreAuthStack (Lambda@Edge) in target account
-      - name: Configure AWS credentials (target account -- deploy Lambda@Edge)
+      # Step 2: Deploy shared Lambda@Edge + provision ACM cert (us-east-1)
+      - name: Configure AWS credentials (target account -- us-east-1 for Lambda@Edge + ACM)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_deploy_role_arn }}
           aws-region: us-east-1
 
-      - name: Deploy SitestoreAuthStack
-        id: deploy_edge
+      - name: Deploy SitestoreSharedEdgeStack (idempotent)
+        id: edge_stack
         run: |
-          pnpm cdk deploy SitestoreAuthStack --require-approval never \
-            -c siteId=${{ inputs.site_id }} \
-            -c cognitoGroupId=${{ inputs.cognito_group_id }} \
-            -c userPoolId=${{ steps.cognito.outputs.user_pool_id }} \
-            -c cognitoDomain=${{ steps.cognito.outputs.cognito_domain }} \
-            -c clientId=${{ steps.cognito.outputs.client_id }} \
-            -c cloudfrontDomain=${{ inputs.cloudfront_domain }} \
-            -c ssmReaderRoleArn=${{ steps.cognito.outputs.ssm_reader_role_arn }} \
-            --outputs-file sitestore-auth-outputs.json
-          LAMBDA_ARN=$(jq -r '.SitestoreAuthStack.LambdaEdgeVersionArn' sitestore-auth-outputs.json)
+          pnpm cdk deploy SitestoreSharedEdgeStack --require-approval never \
+            --app "pnpm exec ts-node --prefer-ts-exts bin/sitestore-shared.ts" \
+            -c ssmReaderRoleArn="${{ steps.prod_config.outputs.ssm_reader_role_arn }}" \
+            --outputs-file shared-edge-outputs.json
+          LAMBDA_ARN=$(jq -r '.SitestoreSharedEdgeStack.LambdaEdgeVersionArn' shared-edge-outputs.json)
           echo "lambda_edge_version_arn=$LAMBDA_ARN" >> "$GITHUB_OUTPUT"
+          echo "Shared Lambda@Edge ARN: $LAMBDA_ARN"
 
-      # Step 3 - Update CloudFront distribution: remove CF Function (basic auth), add Lambda@Edge
-      - name: Configure AWS credentials (target account -- update CF distribution)
+      - name: Provision ACM wildcard certificate (idempotent)
+        id: acm
+        run: |
+          SUFFIX="${{ inputs.subdomain_suffix }}"
+          WILDCARD="*.$SUFFIX"
+          SSM_KEY="/shared/sitestore/acm/${SUFFIX}/cert-arn"
+
+          # Reuse an existing ISSUED cert if we stored one previously
+          CERT_ARN=$(aws ssm get-parameter --name "$SSM_KEY" \
+            --query Parameter.Value --output text 2>/dev/null || echo "")
+          if [ -n "$CERT_ARN" ]; then
+            STATUS=$(aws acm describe-certificate --certificate-arn "$CERT_ARN" \
+              --query Certificate.Status --output text 2>/dev/null || echo "NOT_FOUND")
+            if [ "$STATUS" = "ISSUED" ]; then
+              echo "cert_arn=$CERT_ARN" >> "$GITHUB_OUTPUT"
+              echo "Reusing existing cert: $CERT_ARN (status: ISSUED)"
+              exit 0
+            fi
+            echo "Stored cert $CERT_ARN has status $STATUS -- requesting a new one"
+          fi
+
+          # Request new wildcard certificate
+          echo "Requesting new ACM cert for $WILDCARD ..."
+          CERT_ARN=$(aws acm request-certificate \
+            --domain-name "$WILDCARD" \
+            --validation-method DNS \
+            --query CertificateArn --output text)
+          echo "Requested cert: $CERT_ARN"
+          echo "cert_arn=$CERT_ARN" >> "$GITHUB_OUTPUT"
+          echo "needs_validation=true" >> "$GITHUB_OUTPUT"
+
+          # Wait up to 30s for the validation record to become available
+          for i in $(seq 1 10); do
+            VALIDATION=$(aws acm describe-certificate --certificate-arn "$CERT_ARN" \
+              --query 'Certificate.DomainValidationOptions[0].ResourceRecord' \
+              --output json 2>/dev/null || echo "null")
+            if [ "$VALIDATION" != "null" ] && [ -n "$VALIDATION" ]; then break; fi
+            echo "Waiting for validation record... ($i/10)"
+            sleep 3
+          done
+
+          VAL_NAME=$(echo "$VALIDATION" | jq -r '.Name')
+          VAL_VALUE=$(echo "$VALIDATION" | jq -r '.Value')
+          echo "val_name=$VAL_NAME" >> "$GITHUB_OUTPUT"
+          echo "val_value=$VAL_VALUE" >> "$GITHUB_OUTPUT"
+          echo "Validation CNAME: $VAL_NAME -> $VAL_VALUE"
+
+      # Step 3: Add DNS validation CNAME in prod Route53 (new certs only)
+      - name: Configure AWS credentials (prod -- add validation CNAME)
+        if: steps.acm.outputs.needs_validation == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.SITESTORE_CONFIG_READER_ROLE }}
+          aws-region: ${{ env.PROD_REGION }}
+
+      - name: Add ACM validation CNAME to Route53
+        if: steps.acm.outputs.needs_validation == 'true'
+        run: |
+          SUFFIX="${{ inputs.subdomain_suffix }}"
+          # CloudFormation export name follows the pattern: SiteSubdomain{Suffix_capitalized}ZoneId
+          SUFFIX_LABEL="${SUFFIX%%.*}"
+          SUFFIX_CAP="$(echo "${SUFFIX_LABEL:0:1}" | tr '[:lower:]' '[:upper:]')${SUFFIX_LABEL:1}"
+          ZONE_ID=$(aws cloudformation list-exports \
+            --query "Exports[?Name=='SiteSubdomain${SUFFIX_CAP}ZoneId'].Value | [0]" \
+            --output text)
+          echo "Zone ID for $SUFFIX: $ZONE_ID"
+
+          aws route53 change-resource-record-sets \
+            --hosted-zone-id "$ZONE_ID" \
+            --change-batch "{
+              \"Changes\": [{
+                \"Action\": \"UPSERT\",
+                \"ResourceRecordSet\": {
+                  \"Name\": \"${{ steps.acm.outputs.val_name }}\",
+                  \"Type\": \"CNAME\",
+                  \"TTL\": 300,
+                  \"ResourceRecords\": [{ \"Value\": \"${{ steps.acm.outputs.val_value }}\" }]
+                }
+              }]
+            }"
+          echo "Validation CNAME added to Route53"
+
+      # Step 4: Wait for cert to become ISSUED
+      - name: Configure AWS credentials (target -- wait for cert validation)
+        if: steps.acm.outputs.needs_validation == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_deploy_role_arn }}
+          aws-region: us-east-1
+
+      - name: Wait for ACM cert to be ISSUED
+        if: steps.acm.outputs.needs_validation == 'true'
+        run: |
+          CERT_ARN="${{ steps.acm.outputs.cert_arn }}"
+          echo "Waiting for cert $CERT_ARN to be issued (up to 10 minutes)..."
+          for i in $(seq 1 60); do
+            STATUS=$(aws acm describe-certificate --certificate-arn "$CERT_ARN" \
+              --query Certificate.Status --output text)
+            echo "  Attempt $i/60: $STATUS"
+            if [ "$STATUS" = "ISSUED" ]; then
+              echo "Certificate is ISSUED."
+              break
+            fi
+            if [ "$STATUS" = "FAILED" ]; then
+              echo "ERROR: Certificate validation failed."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          # Cache the cert ARN in SSM for future workflow runs
+          aws ssm put-parameter \
+            --name "/shared/sitestore/acm/${{ inputs.subdomain_suffix }}/cert-arn" \
+            --value "$CERT_ARN" \
+            --type String \
+            --overwrite
+          echo "Cert ARN cached in SSM."
+
+      # Step 5: Attach alias + cert + Lambda@Edge to CloudFront
+      - name: Configure AWS credentials (target -- update CloudFront distribution)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.aws_deploy_role_arn }}
           aws-region: ${{ inputs.aws_region }}
 
-      - name: Attach Lambda@Edge to CloudFront distribution
+      - name: Look up CloudFront distribution ID from origin domain
+        id: cf
         run: |
-          DIST_ID="${{ inputs.distribution_id }}"
-          LAMBDA_ARN="${{ steps.deploy_edge.outputs.lambda_edge_version_arn }}"
+          ORIGIN="${{ inputs.cloudfront_origin_domain }}"
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?DomainName=='$ORIGIN'].Id | [0]" \
+            --output text)
+          if [ -z "$DIST_ID" ] || [ "$DIST_ID" = "None" ]; then
+            echo "ERROR: No CloudFront distribution found with origin domain: $ORIGIN"
+            exit 1
+          fi
+          echo "distribution_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+          echo "Found distribution: $DIST_ID"
 
-          # Get current config + ETag
+      - name: Attach alias, ACM cert, and Lambda@Edge to CloudFront distribution
+        run: |
+          DIST_ID="${{ steps.cf.outputs.distribution_id }}"
+          LAMBDA_ARN="${{ steps.edge_stack.outputs.lambda_edge_version_arn }}"
+          CERT_ARN="${{ steps.acm.outputs.cert_arn }}"
+          CUSTOM_DOMAIN="${{ inputs.custom_domain }}"
+
           CONFIG=$(aws cloudfront get-distribution-config --id "$DIST_ID")
           ETAG=$(echo "$CONFIG" | jq -r '.ETag')
           DIST_CONFIG=$(echo "$CONFIG" | jq '.DistributionConfig')
 
-          # Remove any CloudFront Function associations (basic auth) from DefaultCacheBehavior
-          # Add Lambda@Edge as viewer-request
           UPDATED=$(echo "$DIST_CONFIG" | jq \
+            --arg domain "$CUSTOM_DOMAIN" \
+            --arg cert "$CERT_ARN" \
             --arg arn "$LAMBDA_ARN" \
-            '.DefaultCacheBehavior.FunctionAssociations = {"Quantity": 0, "Items": []}
+            '.Aliases = { "Quantity": 1, "Items": [$domain] }
+            | .ViewerCertificate = {
+                "ACMCertificateArn": $cert,
+                "SSLSupportMethod": "sni-only",
+                "MinimumProtocolVersion": "TLSv1.2_2021",
+                "CertificateSource": "acm"
+              }
+            | .DefaultCacheBehavior.FunctionAssociations = {"Quantity": 0, "Items": []}
             | .DefaultCacheBehavior.LambdaFunctionAssociations = {
                 "Quantity": 1,
                 "Items": [{
@@ -178,19 +285,19 @@ jobs:
             --id "$DIST_ID" \
             --distribution-config "$UPDATED" \
             --if-match "$ETAG"
+          echo "CloudFront distribution updated: $DIST_ID"
 
-          echo "CloudFront distribution $DIST_ID updated. Lambda@Edge attached."
-
-      - name: Print job summary
+      - name: Summary
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          ## SiteStore Attach Complete
+          ## SiteStore CF Attach Complete
 
-          **Distribution ID:** \`${{ inputs.distribution_id }}\`
-          **Lambda@Edge:** \`${{ steps.deploy_edge.outputs.lambda_edge_version_arn }}\`
+          | | |
+          |---|---|
+          | Distribution ID | \`${{ steps.cf.outputs.distribution_id }}\` |
+          | Custom Domain | \`${{ inputs.custom_domain }}\` |
+          | Lambda@Edge | \`${{ steps.edge_stack.outputs.lambda_edge_version_arn }}\` |
+          | ACM Cert | \`${{ steps.acm.outputs.cert_arn }}\` |
 
-          Basic auth CloudFront Function has been removed.
-          Lambda@Edge (SiteStore Cognito auth) is now the viewer-request handler.
-
-          Allow up to 15 minutes for the CloudFront distribution to fully propagate.
+          CloudFront propagation takes ~5 minutes. DNS CNAME is managed by SiteStore.
           EOF
