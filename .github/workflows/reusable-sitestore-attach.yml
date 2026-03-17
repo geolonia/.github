@@ -14,9 +14,7 @@
 #       with:
 #         cloudfront_origin_domain: ${{ vars.SITESTORE_CF_ORIGIN_DOMAIN }}
 #         custom_domain:            ${{ vars.SITESTORE_CUSTOM_DOMAIN }}
-#         subdomain_suffix:         ${{ vars.SITESTORE_SUBDOMAIN_SUFFIX }}
-#       secrets:
-#         aws_deploy_role_arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+#       # No extra secrets needed -- set AWS_DEPLOY_ROLE_ARN as a repo variable in the calling repo
 
 name: "[REUSABLE] Attach SiteStore to CloudFront distribution"
 
@@ -31,19 +29,11 @@ on:
         description: "Public-facing custom domain (e.g. mysite.pages.geolonia.com)"
         required: true
         type: string
-      subdomain_suffix:
-        description: "Subdomain family (pages.geolonia.com | demo.geolonia.com | preview.geolonia.com)"
-        required: true
-        type: string
       aws_region:
         description: "AWS region where the CloudFront distribution was created"
         required: false
         type: string
         default: "ap-northeast-1"
-    secrets:
-      aws_deploy_role_arn:
-        description: "IAM role ARN in the target account (CloudFront + CDK permissions)"
-        required: true
 
 permissions:
   contents: read
@@ -96,7 +86,7 @@ jobs:
       - name: Configure AWS credentials (target account -- us-east-1 for Lambda@Edge + ACM)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.aws_deploy_role_arn }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Deploy SitestoreSharedEdgeStack (idempotent)
@@ -112,10 +102,9 @@ jobs:
 
       - name: Provision ACM wildcard certificate (idempotent)
         id: acm
-        env:
-          SUBDOMAIN_SUFFIX: ${{ inputs.subdomain_suffix }}
         run: |
-          SUFFIX="$SUBDOMAIN_SUFFIX"
+          CUSTOM_DOMAIN="${{ inputs.custom_domain }}"
+          SUFFIX="${CUSTOM_DOMAIN#*.}"
           WILDCARD="*.$SUFFIX"
           SSM_KEY="/shared/sitestore/acm/${SUFFIX}/cert-arn"
 
@@ -175,11 +164,11 @@ jobs:
       - name: Add ACM validation CNAME to Route53
         if: steps.acm.outputs.needs_validation == 'true'
         env:
-          SUBDOMAIN_SUFFIX: ${{ inputs.subdomain_suffix }}
           VAL_NAME: ${{ steps.acm.outputs.val_name }}
           VAL_VALUE: ${{ steps.acm.outputs.val_value }}
         run: |
-          SUFFIX="$SUBDOMAIN_SUFFIX"
+          CUSTOM_DOMAIN="${{ inputs.custom_domain }}"
+          SUFFIX="${CUSTOM_DOMAIN#*.}"
           # CloudFormation export name follows the pattern: SiteSubdomain{Suffix_capitalized}ZoneId
           SUFFIX_LABEL="${SUFFIX%%.*}"
           SUFFIX_CAP="$(echo "${SUFFIX_LABEL:0:1}" | tr '[:lower:]' '[:upper:]')${SUFFIX_LABEL:1}"
@@ -202,15 +191,16 @@ jobs:
         if: steps.acm.outputs.needs_validation == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.aws_deploy_role_arn }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Wait for ACM cert to be ISSUED
         if: steps.acm.outputs.needs_validation == 'true'
         env:
           CERT_ARN: ${{ steps.acm.outputs.cert_arn }}
-          SUBDOMAIN_SUFFIX: ${{ inputs.subdomain_suffix }}
         run: |
+          CUSTOM_DOMAIN="${{ inputs.custom_domain }}"
+          SUFFIX="${CUSTOM_DOMAIN#*.}"
           echo "Waiting for cert $CERT_ARN to be issued (up to 10 minutes)..."
           for i in $(seq 1 60); do
             STATUS=$(aws acm describe-certificate --certificate-arn "$CERT_ARN" \
@@ -234,7 +224,7 @@ jobs:
 
           # Cache the cert ARN in SSM for future workflow runs
           aws ssm put-parameter \
-            --name "/shared/sitestore/acm/$SUBDOMAIN_SUFFIX/cert-arn" \
+            --name "/shared/sitestore/acm/$SUFFIX/cert-arn" \
             --value "$CERT_ARN" \
             --type String \
             --overwrite
@@ -244,7 +234,7 @@ jobs:
       - name: Configure AWS credentials (target -- update CloudFront distribution)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.aws_deploy_role_arn }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
 
       - name: Look up CloudFront distribution ID from origin domain
