@@ -1,0 +1,184 @@
+# Reusable workflow: attach SiteStore Lambda@Edge auth to an existing CloudFront distribution.
+#
+# Usage (caller workflow — add to your site repo):
+#
+#   jobs:
+#     attach:
+#       uses: geolonia/.github/.github/workflows/reusable-sitestore-attach.yml@main
+#       with:
+#         distribution_id:   ${{ vars.CF_DISTRIBUTION_ID }}
+#         site_id:           ${{ vars.SITESTORE_SITE_ID }}
+#         cognito_group_id:  ${{ vars.SITESTORE_COGNITO_GROUP_ID }}
+#         cloudfront_domain: ${{ vars.SITESTORE_CF_DOMAIN }}
+#       secrets:
+#         aws_deploy_role_arn: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+
+name: "[REUSABLE] Attach SiteStore Lambda@Edge to existing CloudFront distribution"
+
+on:
+  workflow_call:
+    inputs:
+      distribution_id:
+        description: "CloudFront distribution ID to attach Lambda@Edge to"
+        required: true
+        type: string
+      site_id:
+        description: "SiteStore site UUID (from SiteStore admin panel)"
+        required: true
+        type: string
+      cognito_group_id:
+        description: "Cognito group ID for this site (from SiteStore admin panel)"
+        required: true
+        type: string
+      cloudfront_domain:
+        description: "Public-facing CloudFront domain (e.g. my-map.demo.geolonia.com)"
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region where the CF distribution lives"
+        required: false
+        type: string
+        default: "ap-northeast-1"
+    secrets:
+      aws_deploy_role_arn:
+        description: "IAM role ARN in the target account (must have CloudFront + CFN permissions)"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    env:
+      PROD_REGION: ap-northeast-1
+      SITESTORE_CONFIG_READER_ROLE: arn:aws:iam::916205284767:role/SitestoreWorkflowConfigReaderRole
+
+    steps:
+      - name: Checkout geolonia-distribution-cdk
+        uses: actions/checkout@v4
+        with:
+          repository: geolonia/geolonia-distribution-cdk
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      # Step 1 - Read Cognito config from prod account
+      - name: Configure AWS credentials (prod -- read Cognito config)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.SITESTORE_CONFIG_READER_ROLE }}
+          aws-region: ${{ env.PROD_REGION }}
+
+      - name: Read Cognito config from SSM and register callback URL
+        id: cognito
+        run: |
+          USER_POOL_ID=$(aws ssm get-parameter --name /shared/cognito/user-pool-id --query Parameter.Value --output text)
+          COGNITO_DOMAIN=$(aws ssm get-parameter --name /shared/cognito/domain --query Parameter.Value --output text)
+          CLIENT_ID=$(aws ssm get-parameter --name /shared/cognito/distribution-client-id --query Parameter.Value --output text)
+          SSM_READER_ROLE_ARN=$(aws ssm get-parameter --name /shared/cognito/ssm-reader-role-arn --query Parameter.Value --output text)
+          echo "user_pool_id=$USER_POOL_ID" >> "$GITHUB_OUTPUT"
+          echo "cognito_domain=$COGNITO_DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "client_id=$CLIENT_ID" >> "$GITHUB_OUTPUT"
+          echo "ssm_reader_role_arn=$SSM_READER_ROLE_ARN" >> "$GITHUB_OUTPUT"
+
+          # Register callback URL (idempotent)
+          CALLBACK_URL="https://${{ inputs.cloudfront_domain }}/callback"
+          EXISTING=$(aws cognito-idp describe-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" --client-id "$CLIENT_ID" \
+            --query 'UserPoolClient.CallbackURLs' --output json)
+          UPDATED=$(echo "$EXISTING" | jq --arg url "$CALLBACK_URL" '. + [$url] | unique')
+          aws cognito-idp update-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" --client-id "$CLIENT_ID" \
+            --callback-urls "$UPDATED" \
+            --allowed-o-auth-flows authorization_code \
+            --allowed-o-auth-scopes openid email profile \
+            --allowed-o-auth-flows-user-pool-client \
+            --supported-identity-providers COGNITO AWSIdentityCenter
+
+      # Step 2 - Deploy SitestoreAuthStack (Lambda@Edge) in target account
+      - name: Configure AWS credentials (target account -- deploy Lambda@Edge)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_deploy_role_arn }}
+          aws-region: us-east-1
+
+      - name: Deploy SitestoreAuthStack
+        id: deploy_edge
+        run: |
+          pnpm cdk deploy SitestoreAuthStack --require-approval never \
+            -c siteId=${{ inputs.site_id }} \
+            -c cognitoGroupId=${{ inputs.cognito_group_id }} \
+            -c userPoolId=${{ steps.cognito.outputs.user_pool_id }} \
+            -c cognitoDomain=${{ steps.cognito.outputs.cognito_domain }} \
+            -c clientId=${{ steps.cognito.outputs.client_id }} \
+            -c cloudfrontDomain=${{ inputs.cloudfront_domain }} \
+            -c ssmReaderRoleArn=${{ steps.cognito.outputs.ssm_reader_role_arn }} \
+            --outputs-file sitestore-auth-outputs.json
+          LAMBDA_ARN=$(jq -r '.SitestoreAuthStack.LambdaEdgeVersionArn' sitestore-auth-outputs.json)
+          echo "lambda_edge_version_arn=$LAMBDA_ARN" >> "$GITHUB_OUTPUT"
+
+      # Step 3 - Update CloudFront distribution: remove CF Function (basic auth), add Lambda@Edge
+      - name: Configure AWS credentials (target account -- update CF distribution)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_deploy_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Attach Lambda@Edge to CloudFront distribution
+        run: |
+          DIST_ID="${{ inputs.distribution_id }}"
+          LAMBDA_ARN="${{ steps.deploy_edge.outputs.lambda_edge_version_arn }}"
+
+          # Get current config + ETag
+          CONFIG=$(aws cloudfront get-distribution-config --id "$DIST_ID")
+          ETAG=$(echo "$CONFIG" | jq -r '.ETag')
+          DIST_CONFIG=$(echo "$CONFIG" | jq '.DistributionConfig')
+
+          # Remove any CloudFront Function associations (basic auth) from DefaultCacheBehavior
+          # Add Lambda@Edge as viewer-request
+          UPDATED=$(echo "$DIST_CONFIG" | jq \
+            --arg arn "$LAMBDA_ARN" \
+            '.DefaultCacheBehavior.FunctionAssociations = {"Quantity": 0, "Items": []}
+            | .DefaultCacheBehavior.LambdaFunctionAssociations = {
+                "Quantity": 1,
+                "Items": [{
+                  "LambdaFunctionARN": $arn,
+                  "EventType": "viewer-request",
+                  "IncludeBody": false
+                }]
+              }')
+
+          aws cloudfront update-distribution \
+            --id "$DIST_ID" \
+            --distribution-config "$UPDATED" \
+            --if-match "$ETAG"
+
+          echo "CloudFront distribution $DIST_ID updated. Lambda@Edge attached."
+
+      - name: Print job summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## SiteStore Attach Complete
+
+          **Distribution ID:** \`${{ inputs.distribution_id }}\`
+          **Lambda@Edge:** \`${{ steps.deploy_edge.outputs.lambda_edge_version_arn }}\`
+
+          Basic auth CloudFront Function has been removed.
+          Lambda@Edge (SiteStore Cognito auth) is now the viewer-request handler.
+
+          Allow up to 15 minutes for the CloudFront distribution to fully propagate.
+          EOF
