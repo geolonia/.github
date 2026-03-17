@@ -75,7 +75,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       # Step 1: Read SSM reader role ARN from prod account
       - name: Configure AWS credentials (prod -- read SSM reader role ARN)
@@ -112,8 +112,10 @@ jobs:
 
       - name: Provision ACM wildcard certificate (idempotent)
         id: acm
+        env:
+          SUBDOMAIN_SUFFIX: ${{ inputs.subdomain_suffix }}
         run: |
-          SUFFIX="${{ inputs.subdomain_suffix }}"
+          SUFFIX="$SUBDOMAIN_SUFFIX"
           WILDCARD="*.$SUFFIX"
           SSM_KEY="/shared/sitestore/acm/${SUFFIX}/cert-arn"
 
@@ -151,6 +153,11 @@ jobs:
             sleep 3
           done
 
+          if [ "$VALIDATION" = "null" ] || [ -z "$VALIDATION" ]; then
+            echo "ERROR: ACM validation record did not appear within 30 seconds. Cannot proceed."
+            exit 1
+          fi
+
           VAL_NAME=$(echo "$VALIDATION" | jq -r '.Name')
           VAL_VALUE=$(echo "$VALIDATION" | jq -r '.Value')
           echo "val_name=$VAL_NAME" >> "$GITHUB_OUTPUT"
@@ -167,8 +174,12 @@ jobs:
 
       - name: Add ACM validation CNAME to Route53
         if: steps.acm.outputs.needs_validation == 'true'
+        env:
+          SUBDOMAIN_SUFFIX: ${{ inputs.subdomain_suffix }}
+          VAL_NAME: ${{ steps.acm.outputs.val_name }}
+          VAL_VALUE: ${{ steps.acm.outputs.val_value }}
         run: |
-          SUFFIX="${{ inputs.subdomain_suffix }}"
+          SUFFIX="$SUBDOMAIN_SUFFIX"
           # CloudFormation export name follows the pattern: SiteSubdomain{Suffix_capitalized}ZoneId
           SUFFIX_LABEL="${SUFFIX%%.*}"
           SUFFIX_CAP="$(echo "${SUFFIX_LABEL:0:1}" | tr '[:lower:]' '[:upper:]')${SUFFIX_LABEL:1}"
@@ -177,19 +188,13 @@ jobs:
             --output text)
           echo "Zone ID for $SUFFIX: $ZONE_ID"
 
+          CHANGE_BATCH=$(jq -n \
+            --arg name "$VAL_NAME" \
+            --arg value "$VAL_VALUE" \
+            '{"Changes":[{"Action":"UPSERT","ResourceRecordSet":{"Name":$name,"Type":"CNAME","TTL":300,"ResourceRecords":[{"Value":$value}]}}]}')
           aws route53 change-resource-record-sets \
             --hosted-zone-id "$ZONE_ID" \
-            --change-batch "{
-              \"Changes\": [{
-                \"Action\": \"UPSERT\",
-                \"ResourceRecordSet\": {
-                  \"Name\": \"${{ steps.acm.outputs.val_name }}\",
-                  \"Type\": \"CNAME\",
-                  \"TTL\": 300,
-                  \"ResourceRecords\": [{ \"Value\": \"${{ steps.acm.outputs.val_value }}\" }]
-                }
-              }]
-            }"
+            --change-batch "$CHANGE_BATCH"
           echo "Validation CNAME added to Route53"
 
       # Step 4: Wait for cert to become ISSUED
@@ -202,8 +207,10 @@ jobs:
 
       - name: Wait for ACM cert to be ISSUED
         if: steps.acm.outputs.needs_validation == 'true'
+        env:
+          CERT_ARN: ${{ steps.acm.outputs.cert_arn }}
+          SUBDOMAIN_SUFFIX: ${{ inputs.subdomain_suffix }}
         run: |
-          CERT_ARN="${{ steps.acm.outputs.cert_arn }}"
           echo "Waiting for cert $CERT_ARN to be issued (up to 10 minutes)..."
           for i in $(seq 1 60); do
             STATUS=$(aws acm describe-certificate --certificate-arn "$CERT_ARN" \
@@ -220,9 +227,14 @@ jobs:
             sleep 10
           done
 
+          if [ "$STATUS" != "ISSUED" ]; then
+            echo "ERROR: Certificate did not reach ISSUED state within timeout (10 minutes)."
+            exit 1
+          fi
+
           # Cache the cert ARN in SSM for future workflow runs
           aws ssm put-parameter \
-            --name "/shared/sitestore/acm/${{ inputs.subdomain_suffix }}/cert-arn" \
+            --name "/shared/sitestore/acm/$SUBDOMAIN_SUFFIX/cert-arn" \
             --value "$CERT_ARN" \
             --type String \
             --overwrite
@@ -237,8 +249,10 @@ jobs:
 
       - name: Look up CloudFront distribution ID from origin domain
         id: cf
+        env:
+          CLOUDFRONT_ORIGIN: ${{ inputs.cloudfront_origin_domain }}
         run: |
-          ORIGIN="${{ inputs.cloudfront_origin_domain }}"
+          ORIGIN="$CLOUDFRONT_ORIGIN"
           DIST_ID=$(aws cloudfront list-distributions \
             --query "DistributionList.Items[?DomainName=='$ORIGIN'].Id | [0]" \
             --output text)
@@ -250,15 +264,20 @@ jobs:
           echo "Found distribution: $DIST_ID"
 
       - name: Attach alias, ACM cert, and Lambda@Edge to CloudFront distribution
+        env:
+          DIST_ID: ${{ steps.cf.outputs.distribution_id }}
+          LAMBDA_ARN: ${{ steps.edge_stack.outputs.lambda_edge_version_arn }}
+          CERT_ARN: ${{ steps.acm.outputs.cert_arn }}
+          CUSTOM_DOMAIN: ${{ inputs.custom_domain }}
         run: |
-          DIST_ID="${{ steps.cf.outputs.distribution_id }}"
-          LAMBDA_ARN="${{ steps.edge_stack.outputs.lambda_edge_version_arn }}"
-          CERT_ARN="${{ steps.acm.outputs.cert_arn }}"
-          CUSTOM_DOMAIN="${{ inputs.custom_domain }}"
-
           CONFIG=$(aws cloudfront get-distribution-config --id "$DIST_ID")
           ETAG=$(echo "$CONFIG" | jq -r '.ETag')
           DIST_CONFIG=$(echo "$CONFIG" | jq '.DistributionConfig')
+
+          EXISTING_ALIAS_COUNT=$(echo "$DIST_CONFIG" | jq '.Aliases.Quantity')
+          if [ "$EXISTING_ALIAS_COUNT" -gt 0 ]; then
+            echo "WARNING: Replacing $EXISTING_ALIAS_COUNT existing alias(es) with $CUSTOM_DOMAIN"
+          fi
 
           UPDATED=$(echo "$DIST_CONFIG" | jq \
             --arg domain "$CUSTOM_DOMAIN" \
