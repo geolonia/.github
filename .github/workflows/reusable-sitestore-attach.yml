@@ -50,6 +50,10 @@ on:
         required: false
         type: string
         default: "ap-northeast-1"
+      aws_deploy_role_arn:
+        description: "IAM role ARN in the AWS account where the distribution lives (overrides AWS_DEPLOY_ROLE_ARN variable)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -98,7 +102,7 @@ jobs:
       - name: Configure AWS credentials (target account -- us-east-1 for Lambda@Edge + ACM)
         uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ inputs.aws_deploy_role_arn || vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Deploy SitestoreSharedEdgeStack (idempotent)
@@ -203,7 +207,7 @@ jobs:
         if: steps.acm.outputs.needs_validation == 'true'
         uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ inputs.aws_deploy_role_arn || vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Wait for ACM cert to be ISSUED
@@ -246,7 +250,7 @@ jobs:
       - name: Configure AWS credentials (target -- update CloudFront distribution)
         uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ inputs.aws_deploy_role_arn || vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
 
       - name: Look up CloudFront distribution ID from origin domain
