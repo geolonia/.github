@@ -63,8 +63,6 @@ jobs:
   release:
     name: Create release & move major/minor tags
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
     outputs:
       tag:   ${{ steps.semver.outputs.tag }}
       major: ${{ steps.semver.outputs.major }}
@@ -96,14 +94,20 @@ jobs:
           echo "minor=v$MAJOR.$MINOR" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release (idempotent)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.semver.outputs.tag }}
-          name:     ${{ steps.semver.outputs.tag }}
-          generate_release_notes: ${{ inputs.generate_release_notes }}
-          prerelease:             ${{ inputs.prerelease }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.semver.outputs.tag }}
+          GENERATE_NOTES: ${{ inputs.generate_release_notes }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists, skipping"
+          else
+            args=("$TAG" --title "$TAG")
+            [[ "$GENERATE_NOTES" == "true" ]] && args+=(--generate-notes)
+            [[ "$PRERELEASE"     == "true" ]] && args+=(--prerelease)
+            gh release create "${args[@]}"
+          fi
 
       - name: Generate GitHub App token
         id: app_token
