@@ -130,3 +130,109 @@ Ensure the workflow environment has access to the OIDC-based credentials.
 Check that the AWS account ID secret (`TECHDOCS_AWS_ACCOUNT_ID` or the repo
 override `AWS_ACCOUNT_ID`) is set and non-empty, and that the IAM role trust
 policy allows the `geolonia` GitHub org.
+
+## CDK Deploy Monitor (`reusable-cdk-deploy-monitor.yml`)
+
+Runs as a parallel job alongside a CDK deploy to detect hanging CloudFormation stacks.
+When no new CloudFormation events appear for a configurable threshold, it fetches
+CloudWatch logs and asks the GitHub Models AI (GPT-4o) whether the deployment is stuck
+or just slow. The verdict is posted as a commit comment. If `auto_cancel` is enabled and
+the AI says CANCEL, the workflow calls `cancel-update-stack`, triggering a rollback and
+causing the deploy job to fail cleanly instead of timing out.
+
+### When to use it
+
+Add this to any repo that deploys CDK stacks via GitHub Actions and has experienced
+GH Actions timeouts due to hanging CloudFormation updates.
+
+### Required IAM permissions for `aws_role_arn`
+
+The OIDC role passed as `aws_role_arn` must include the `CdkDeployMonitor` permission
+bundle (defined in `geolonia-infra-cdk`):
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "cloudformation:DescribeStackEvents",
+    "cloudformation:DescribeStacks",
+    "cloudformation:CancelUpdateStack",
+    "logs:DescribeLogGroups",
+    "logs:DescribeLogStreams",
+    "logs:FilterLogEvents",
+    "logs:GetLogEvents"
+  ],
+  "Resource": "*"
+}
+```
+
+For repos using `geolonia-infra-cdk` to manage their deploy role, add
+`permissionBundles: ['CdkDeployMonitor']` to the role entry in the account config.
+
+### Example integration
+
+```yaml
+jobs:
+  deploy:
+    # ... your existing deploy job, unchanged
+
+  monitor:
+    uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
+    with:
+      stack_name: MyAppStack
+      aws_region: ap-northeast-1
+      log_group_name: "MyAppStack-MyLogGroup"   # optional
+      hang_threshold_minutes: 10                 # optional, default: 10
+      auto_cancel: false                         # optional, default: false
+    secrets:
+      aws_role_arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/YOUR_DEPLOY_ROLE
+```
+
+Also add `pull-requests: write` to the calling workflow's top-level `permissions:` block
+so the monitor can post commit comments.
+
+### Input reference
+
+| Input | Type | Default | Description |
+|---|---|---|---|
+| `stack_name` | string | required | CloudFormation stack name to monitor |
+| `aws_region` | string | required | AWS region |
+| `log_group_name` | string | `""` | CloudWatch log group name or prefix (leave empty to skip) |
+| `hang_threshold_minutes` | number | `10` | Minutes of silence before asking AI |
+| `poll_interval_seconds` | number | `120` | How often to poll (seconds) |
+| `auto_cancel` | boolean | `false` | If true, AI verdict of CANCEL triggers `cancel-update-stack` |
+
+### `auto_cancel` trade-offs
+
+| Setting | Behaviour |
+|---|---|
+| `false` (default) | Advisory mode: AI posts a comment but never cancels. Safe for initial rollout. |
+| `true` | Automatic: cancels the stack on AI verdict, stopping the timeout. Preferred once you trust the AI accuracy. |
+
+Start with `auto_cancel: false` to validate AI judgements over a few real deploys before enabling `true`.
+
+### Log sensitivity warning
+
+**Do not set `log_group_name`** if your application logs may contain secrets, credentials,
+PII, or other sensitive data. Log content is sent to the GitHub Models API (Azure-hosted
+OpenAI service) and is also visible in the commit comment. When in doubt, omit the input.
+
+### Troubleshooting
+
+**Monitor exits immediately without analysing:**
+The stack may have already reached a terminal state before the first poll. This is normal
+for fast deploys. Check the `Monitor stack` step log for the final status line.
+
+**AI analysis not firing:**
+Confirm `hang_threshold_minutes` is not set too high relative to your GH Actions job
+timeout. Check the `Monitor stack` step logs for `[HH:MM:SS] Stack status:` lines.
+
+**Commit comment not posted:**
+Ensure the calling workflow has `pull-requests: write` in its `permissions:` block.
+Without it, the GITHUB_TOKEN passed to the reusable workflow will lack the required scope.
+
+**`cancel-update-stack` returns an error:**
+The stack may have already reached a terminal state between the AI analysis and the
+cancel call. This is harmless. Check the commit comment for the error detail.
+The OIDC role must also have `cloudformation:CancelUpdateStack` -- verify the
+`CdkDeployMonitor` permission bundle is attached.
