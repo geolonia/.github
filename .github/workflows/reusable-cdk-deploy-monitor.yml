@@ -211,7 +211,7 @@ jobs:
               -d "$REQUEST_BODY" 2>/dev/null || echo '{}')
 
             AI_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "WAIT Could not reach AI model."' 2>/dev/null || echo "WAIT Could not parse AI response.")
-            VERDICT=$(echo "$AI_TEXT" | head -1 | grep -oE '^(CANCEL|WAIT)' || echo "WAIT")
+            VERDICT=$(echo "$AI_TEXT" | head -1 | tr '[:lower:]' '[:upper:]' | grep -oE '^(CANCEL|WAIT)' || echo "WAIT")
 
             echo "AI verdict: $VERDICT"
             echo "AI explanation: $AI_TEXT"
