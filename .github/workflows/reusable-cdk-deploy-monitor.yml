@@ -1,0 +1,69 @@
+name: "[REUSABLE] CDK Deploy Monitor"
+
+on:
+  workflow_call:
+    inputs:
+      stack_name:
+        description: "CloudFormation stack name to monitor"
+        type: string
+        required: true
+      aws_region:
+        description: "AWS region where the stack is deployed"
+        type: string
+        required: true
+      log_group_name:
+        description: "CloudWatch log group name or prefix pattern (optional; leave empty to skip log fetching)"
+        type: string
+        required: false
+        default: ""
+      hang_threshold_minutes:
+        description: "Minutes with no new CloudFormation events before asking AI"
+        type: number
+        required: false
+        default: 10
+      poll_interval_seconds:
+        description: "How often to poll CloudFormation events (seconds)"
+        type: number
+        required: false
+        default: 120
+      auto_cancel:
+        description: "Whether an AI verdict of CANCEL triggers cancel-update-stack (default: false = advisory only)"
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      aws_role_arn:
+        description: "OIDC IAM role ARN with cloudformation:DescribeStackEvents, CancelUpdateStack, and logs read permissions"
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  monitor:
+    name: Monitor CDK deploy (${{ inputs.stack_name }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Monitor stack
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          LOG_GROUP_NAME: ${{ inputs.log_group_name }}
+          HANG_THRESHOLD_MINUTES: ${{ inputs.hang_threshold_minutes }}
+          POLL_INTERVAL_SECONDS: ${{ inputs.poll_interval_seconds }}
+          AUTO_CANCEL: ${{ inputs.auto_cancel }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          # TODO: polling loop (Task 2)
+          echo "Monitor started for stack: $STACK_NAME"
+          echo "Hang threshold: ${HANG_THRESHOLD_MINUTES}m, Poll interval: ${POLL_INTERVAL_SECONDS}s, Auto-cancel: $AUTO_CANCEL"
