@@ -45,6 +45,7 @@ jobs:
   monitor:
     name: Monitor CDK deploy (${{ inputs.stack_name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -126,6 +127,7 @@ jobs:
 
             if [[ "$SECONDS_SINCE_LAST_EVENT" -ge "$HANG_THRESHOLD_SECONDS" ]]; then
               echo "No new events for ${SECONDS_SINCE_LAST_EVENT}s (threshold: ${HANG_THRESHOLD_SECONDS}s). Triggering AI analysis."
+              echo "Last event timestamp: ${LATEST_EVENT_TS:-unknown}"
               echo "AI_TRIGGER" > /tmp/ai_trigger
               exit 0
             fi
