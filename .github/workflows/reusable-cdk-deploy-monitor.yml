@@ -134,3 +134,156 @@ jobs:
 
             sleep "$POLL_INTERVAL_SECONDS"
           done
+
+      - name: Analyse hang with AI and act
+        if: always()
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          LOG_GROUP_NAME: ${{ inputs.log_group_name }}
+          HANG_THRESHOLD_MINUTES: ${{ inputs.hang_threshold_minutes }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f /tmp/ai_trigger ]]; then
+            echo "No hang detected -- skipping AI analysis."
+            exit 0
+          fi
+
+          MAX_AI_RETRIES=3
+          AI_RETRIES=0
+
+          while [[ "$AI_RETRIES" -lt "$MAX_AI_RETRIES" ]]; do
+            echo "AI analysis attempt $((AI_RETRIES + 1)) of $MAX_AI_RETRIES"
+
+            # Fetch last 50 CloudFormation events
+            CF_EVENTS=$(aws cloudformation describe-stack-events \
+              --stack-name "$STACK_NAME" \
+              --region "$AWS_REGION" \
+              --max-items 50 \
+              --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Resource:LogicalResourceId,Reason:ResourceStatusReason}' \
+              --output json 2>/dev/null || echo "[]")
+
+            # Fetch CloudWatch logs if log_group_name is set
+            CW_LOGS=""
+            if [[ -n "$LOG_GROUP_NAME" ]]; then
+              RESOLVED_LOG_GROUP=$(aws logs describe-log-groups \
+                --log-group-name-prefix "$LOG_GROUP_NAME" \
+                --region "$AWS_REGION" \
+                --query 'logGroups[0].logGroupName' \
+                --output text 2>/dev/null || echo "")
+
+              if [[ -n "$RESOLVED_LOG_GROUP" && "$RESOLVED_LOG_GROUP" != "None" ]]; then
+                echo "Fetching logs from: $RESOLVED_LOG_GROUP"
+                CW_LOGS=$(aws logs filter-log-events \
+                  --log-group-name "$RESOLVED_LOG_GROUP" \
+                  --region "$AWS_REGION" \
+                  --start-time "$(( ($(date -u +%s) - 1800) * 1000 ))" \
+                  --query 'events[*].message' \
+                  --output text 2>/dev/null \
+                  | tail -200 || echo "")
+              else
+                echo "Log group '$LOG_GROUP_NAME' not found -- skipping log fetch."
+              fi
+            fi
+
+            # Build prompt
+            MINUTES_ELAPSED=$(( (AI_RETRIES + 1) * HANG_THRESHOLD_MINUTES ))
+            CF_EVENTS_TRIMMED=$(echo "$CF_EVENTS" | head -c 8000)
+            PROMPT="Stack name: $STACK_NAME"$'\n'"Region: $AWS_REGION"$'\n'"Minutes since last CloudFormation event: $MINUTES_ELAPSED (attempt $((AI_RETRIES + 1)) of $MAX_AI_RETRIES)"$'\n\n'"Recent CloudFormation events (newest first, JSON):"$'\n'"$CF_EVENTS_TRIMMED"
+            if [[ -n "$CW_LOGS" ]]; then
+              CW_LOGS_TRIMMED=$(echo "$CW_LOGS" | head -c 4000)
+              PROMPT="$PROMPT"$'\n\n'"Recent application logs (last 200 lines):"$'\n'"$CW_LOGS_TRIMMED"
+            fi
+
+            # Call GitHub Models API
+            REQUEST_BODY=$(jq -n \
+              --arg prompt "$PROMPT" \
+              '{model:"gpt-4o",messages:[{role:"system",content:"You are a senior DevOps engineer expert in AWS CloudFormation and ECS deployments. Be concise and decisive."},{role:"user",content:("Is this CloudFormation deployment stuck (will not progress without intervention) or still making progress?\n\n" + $prompt + "\n\nReply with exactly CANCEL or WAIT on the first line, followed by a 2-sentence explanation.")}],max_tokens:300}')
+
+            RESPONSE=$(curl -sf \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://models.inference.ai.azure.com/chat/completions" \
+              -d "$REQUEST_BODY" 2>/dev/null || echo '{}')
+
+            AI_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "WAIT Could not reach AI model."' 2>/dev/null || echo "WAIT Could not parse AI response.")
+            VERDICT=$(echo "$AI_TEXT" | head -1 | grep -oE '^(CANCEL|WAIT)' || echo "WAIT")
+
+            echo "AI verdict: $VERDICT"
+            echo "AI explanation: $AI_TEXT"
+
+            # Post commit comment
+            COMMENT_BODY="### CDK Deploy Monitor"$'\n\n'"**Stack:** \`$STACK_NAME\`"$'\n'"**No new CloudFormation events for:** ${MINUTES_ELAPSED} minutes (check $((AI_RETRIES + 1)) of $MAX_AI_RETRIES)"$'\n\n'"**AI Verdict:** \`$VERDICT\`"$'\n\n'"${AI_TEXT}"$'\n\n'"---"$'\n'"*Posted by [reusable-cdk-deploy-monitor](https://github.com/geolonia/.github/blob/main/.github/workflows/reusable-cdk-deploy-monitor.yml)*"
+
+            gh api \
+              "repos/$REPO/commits/$SHA/comments" \
+              -f body="$COMMENT_BODY" \
+              2>/dev/null || echo "Warning: failed to post commit comment"
+
+            if [[ "$VERDICT" == "CANCEL" ]]; then
+              echo "CANCEL" > /tmp/ai_verdict
+              exit 0
+            fi
+
+            AI_RETRIES=$(( AI_RETRIES + 1 ))
+            if [[ "$AI_RETRIES" -lt "$MAX_AI_RETRIES" ]]; then
+              echo "AI said WAIT -- sleeping ${HANG_THRESHOLD_MINUTES}m before retry..."
+              sleep $(( HANG_THRESHOLD_MINUTES * 60 ))
+            else
+              echo "Max AI retries reached -- treating as CANCEL."
+              echo "CANCEL" > /tmp/ai_verdict
+            fi
+          done
+
+      - name: Cancel stack update (if verdict is CANCEL and auto_cancel is true)
+        if: always()
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: ${{ inputs.aws_region }}
+          AUTO_CANCEL: ${{ inputs.auto_cancel }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f /tmp/ai_verdict ]]; then
+            echo "No AI verdict -- nothing to cancel."
+            exit 0
+          fi
+
+          VERDICT=$(cat /tmp/ai_verdict)
+
+          if [[ "$VERDICT" != "CANCEL" ]]; then
+            echo "AI verdict is $VERDICT -- skipping cancellation."
+            exit 0
+          fi
+
+          if [[ "$AUTO_CANCEL" != "true" ]]; then
+            echo "auto_cancel=false -- advisory comment posted, not cancelling stack."
+            exit 0
+          fi
+
+          echo "Cancelling stack update: $STACK_NAME"
+          if aws cloudformation cancel-update-stack \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" 2>/tmp/cancel_error; then
+            echo "Stack update cancelled. CloudFormation is rolling back."
+            CANCEL_COMMENT="### CDK Deploy Monitor -- Update Cancelled"$'\n\n'"Stack \`$STACK_NAME\` update was cancelled (AI verdict: CANCEL, auto_cancel: true)."$'\n'"CloudFormation is rolling back. The deploy job will fail with a rollback error -- this is expected."
+            gh api \
+              "repos/$REPO/commits/$SHA/comments" \
+              -f body="$CANCEL_COMMENT" \
+              2>/dev/null || echo "Warning: failed to post cancel comment"
+          else
+            CANCEL_ERR=$(cat /tmp/cancel_error 2>/dev/null || echo "unknown error")
+            echo "cancel-update-stack failed: $CANCEL_ERR"
+            CANCEL_COMMENT="### CDK Deploy Monitor -- Cancel Attempt Failed"$'\n\n'"Tried to cancel \`$STACK_NAME\` but got an error:"$'\n'"$CANCEL_ERR"$'\n\n'"The stack may have already completed or been cancelled manually."
+            gh api \
+              "repos/$REPO/commits/$SHA/comments" \
+              -f body="$CANCEL_COMMENT" \
+              2>/dev/null || echo "Warning: failed to post error comment"
+          fi
