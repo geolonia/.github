@@ -64,6 +64,71 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
-          # TODO: polling loop (Task 2)
-          echo "Monitor started for stack: $STACK_NAME"
-          echo "Hang threshold: ${HANG_THRESHOLD_MINUTES}m, Poll interval: ${POLL_INTERVAL_SECONDS}s, Auto-cancel: $AUTO_CANCEL"
+          set -euo pipefail
+
+          HANG_THRESHOLD_SECONDS=$(( HANG_THRESHOLD_MINUTES * 60 ))
+          LAST_EVENT_TIME=$(date -u +%s)
+
+          TERMINAL_STATUSES="CREATE_COMPLETE UPDATE_COMPLETE DELETE_COMPLETE \
+            CREATE_FAILED UPDATE_FAILED DELETE_FAILED \
+            ROLLBACK_COMPLETE UPDATE_ROLLBACK_COMPLETE \
+            UPDATE_ROLLBACK_FAILED ROLLBACK_FAILED"
+
+          echo "Monitoring stack: $STACK_NAME"
+          echo "Hang threshold: ${HANG_THRESHOLD_MINUTES}m (${HANG_THRESHOLD_SECONDS}s)"
+          echo "Poll interval: ${POLL_INTERVAL_SECONDS}s"
+
+          while true; do
+            # Fetch stack status
+            STACK_STATUS=$(aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --region "$AWS_REGION" \
+              --query 'Stacks[0].StackStatus' \
+              --output text 2>/dev/null || echo "STACK_NOT_FOUND")
+
+            echo "[$(date -u +%H:%M:%S)] Stack status: $STACK_STATUS"
+
+            # Exit if stack reached a terminal state
+            for STATUS in $TERMINAL_STATUSES; do
+              if [[ "$STACK_STATUS" == "$STATUS" ]]; then
+                echo "Stack reached terminal state: $STACK_STATUS -- monitor exiting."
+                exit 0
+              fi
+            done
+
+            if [[ "$STACK_STATUS" == "STACK_NOT_FOUND" ]]; then
+              echo "Stack not found -- may have been deleted or never existed. Exiting."
+              exit 0
+            fi
+
+            # Fetch latest CloudFormation event timestamp
+            LATEST_EVENT_TS=$(aws cloudformation describe-stack-events \
+              --stack-name "$STACK_NAME" \
+              --region "$AWS_REGION" \
+              --query 'StackEvents[0].Timestamp' \
+              --output text 2>/dev/null || echo "")
+
+            if [[ -n "$LATEST_EVENT_TS" && "$LATEST_EVENT_TS" != "None" ]]; then
+              # Convert ISO8601 timestamp to epoch (supports both Linux and macOS date)
+              LATEST_EPOCH=$(date -u -d "$LATEST_EVENT_TS" +%s 2>/dev/null \
+                || date -u -j -f "%Y-%m-%dT%H:%M:%S" "${LATEST_EVENT_TS%%.*}" +%s 2>/dev/null \
+                || echo "$LAST_EVENT_TIME")
+
+              if [[ "$LATEST_EPOCH" -gt "$LAST_EVENT_TIME" ]]; then
+                echo "New event at $LATEST_EVENT_TS -- resetting hang timer."
+                LAST_EVENT_TIME=$LATEST_EPOCH
+              fi
+            fi
+
+            # Check if hang threshold exceeded
+            NOW=$(date -u +%s)
+            SECONDS_SINCE_LAST_EVENT=$(( NOW - LAST_EVENT_TIME ))
+
+            if [[ "$SECONDS_SINCE_LAST_EVENT" -ge "$HANG_THRESHOLD_SECONDS" ]]; then
+              echo "No new events for ${SECONDS_SINCE_LAST_EVENT}s (threshold: ${HANG_THRESHOLD_SECONDS}s). Triggering AI analysis."
+              echo "AI_TRIGGER" > /tmp/ai_trigger
+              exit 0
+            fi
+
+            sleep "$POLL_INTERVAL_SECONDS"
+          done
