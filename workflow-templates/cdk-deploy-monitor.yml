@@ -1,3 +1,4 @@
+# NOTE: This is a partial snippet -- paste the 'monitor' job into your existing deploy workflow file.
 # Add this `monitor` job alongside your existing `deploy` job.
 # Both jobs run in parallel automatically.
 #
