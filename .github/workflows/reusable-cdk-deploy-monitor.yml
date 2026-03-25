@@ -17,7 +17,7 @@ on:
         required: false
         default: ""
       hang_threshold_minutes:
-        description: "Minutes with no new CloudFormation events before asking AI"
+        description: "Minutes with no new CloudFormation events before asking AI (keep under 40 with defaults: up to 3x this value is spent in AI retries within the 120-minute job timeout)"
         type: number
         required: false
         default: 10
@@ -33,12 +33,12 @@ on:
         default: false
     secrets:
       aws_role_arn:
-        description: "OIDC IAM role ARN with cloudformation:DescribeStackEvents, CancelUpdateStack, and logs read permissions"
+        description: "OIDC IAM role ARN with cloudformation:DescribeStackEvents, DescribeStacks, CancelUpdateStack, and logs read permissions (see CdkDeployMonitor permission bundle)"
         required: true
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
 
           HANG_THRESHOLD_SECONDS=$(( HANG_THRESHOLD_MINUTES * 60 ))
-          LAST_EVENT_TIME=$(date -u +%s)
+          LAST_EVENT_TIME=0
 
           TERMINAL_STATUSES="CREATE_COMPLETE UPDATE_COMPLETE DELETE_COMPLETE \
             CREATE_FAILED UPDATE_FAILED DELETE_FAILED \
@@ -116,7 +116,11 @@ jobs:
                 || echo "$LAST_EVENT_TIME")
 
               if [[ "$LATEST_EPOCH" -gt "$LAST_EVENT_TIME" ]]; then
-                echo "New event at $LATEST_EVENT_TS -- resetting hang timer."
+                if [[ "$LAST_EVENT_TIME" -eq 0 ]]; then
+                  echo "Initialized hang timer from last CF event: $LATEST_EVENT_TS"
+                else
+                  echo "New event at $LATEST_EVENT_TS -- resetting hang timer."
+                fi
                 LAST_EVENT_TIME=$LATEST_EPOCH
               fi
             fi
@@ -156,6 +160,7 @@ jobs:
           MAX_AI_RETRIES=3
           AI_RETRIES=0
 
+          HANG_DETECTED_AT=$(date -u +%s)
           while [[ "$AI_RETRIES" -lt "$MAX_AI_RETRIES" ]]; do
             echo "AI analysis attempt $((AI_RETRIES + 1)) of $MAX_AI_RETRIES"
 
@@ -191,7 +196,9 @@ jobs:
             fi
 
             # Build prompt
-            MINUTES_ELAPSED=$(( (AI_RETRIES + 1) * HANG_THRESHOLD_MINUTES ))
+            MINUTES_ELAPSED=$(( ($(date -u +%s) - HANG_DETECTED_AT) / 60 ))
+            # Ensure at least 1 minute is reported (first call)
+            [[ "$MINUTES_ELAPSED" -lt 1 ]] && MINUTES_ELAPSED=1
             CF_EVENTS_TRIMMED=$(echo "$CF_EVENTS" | head -c 8000)
             PROMPT="Stack name: $STACK_NAME"$'\n'"Region: $AWS_REGION"$'\n'"Minutes since last CloudFormation event: $MINUTES_ELAPSED (attempt $((AI_RETRIES + 1)) of $MAX_AI_RETRIES)"$'\n\n'"Recent CloudFormation events (newest first, JSON):"$'\n'"$CF_EVENTS_TRIMMED"
             if [[ -n "$CW_LOGS" ]]; then
