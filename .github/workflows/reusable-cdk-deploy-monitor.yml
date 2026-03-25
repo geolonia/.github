@@ -80,9 +80,49 @@ jobs:
             ROLLBACK_COMPLETE UPDATE_ROLLBACK_COMPLETE \
             UPDATE_ROLLBACK_FAILED ROLLBACK_FAILED"
 
+          is_terminal() {
+            local s=$1
+            for ts in $TERMINAL_STATUSES; do [[ "$s" == "$ts" ]] && return 0; done
+            return 1
+          }
+
           echo "Monitoring stack: $STACK_NAME"
           echo "Hang threshold: ${HANG_THRESHOLD_MINUTES}m (${HANG_THRESHOLD_SECONDS}s)"
           echo "Poll interval: ${POLL_INTERVAL_SECONDS}s"
+
+          # If the stack is already in a terminal state when the monitor starts,
+          # wait up to 5 minutes for the CDK deploy to begin its update before
+          # entering the hang-detection loop. This avoids premature exit when the
+          # monitor job starts before CDK has called CloudFormation.
+          INITIAL_STATUS=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query 'Stacks[0].StackStatus' \
+            --output text 2>/dev/null || echo "STACK_NOT_FOUND")
+
+          echo "Initial stack status: $INITIAL_STATUS"
+
+          if is_terminal "$INITIAL_STATUS"; then
+            echo "Stack is already in a terminal state -- waiting up to 5m for the deploy to start..."
+            STARTUP_DEADLINE=$(( $(date -u +%s) + 300 ))
+            while true; do
+              sleep 15
+              INITIAL_STATUS=$(aws cloudformation describe-stacks \
+                --stack-name "$STACK_NAME" \
+                --region "$AWS_REGION" \
+                --query 'Stacks[0].StackStatus' \
+                --output text 2>/dev/null || echo "STACK_NOT_FOUND")
+              if ! is_terminal "$INITIAL_STATUS" && [[ "$INITIAL_STATUS" != "STACK_NOT_FOUND" ]]; then
+                echo "Stack entered: $INITIAL_STATUS -- starting monitoring."
+                LAST_EVENT_TIME=$(date -u +%s)
+                break
+              fi
+              if [[ $(date -u +%s) -ge "$STARTUP_DEADLINE" ]]; then
+                echo "Stack did not start a new update within 5m -- exiting."
+                exit 0
+              fi
+            done
+          fi
 
           while true; do
             # Fetch stack status
