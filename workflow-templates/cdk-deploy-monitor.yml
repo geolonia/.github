@@ -1,0 +1,25 @@
+# NOTE: This is a partial snippet -- paste the 'monitor' job into your existing deploy workflow file.
+# Add this `monitor` job alongside your existing `deploy` job.
+# Both jobs run in parallel automatically.
+#
+# Prerequisites:
+#   1. Set CDK_DEPLOY_ROLE_ARN secret in your repo (the same OIDC role used for CDK deploy,
+#      with CdkDeployMonitor permissions added -- see docs/workflows.md in geolonia/.github).
+#   2. Replace stack_name and aws_region with your values.
+#   3. Add these permissions to your workflow's top-level permissions block:
+#        contents: write      # required for commit comments
+#        pull-requests: write # required for PR annotations
+
+jobs:
+  # ... your existing deploy job here ...
+
+  monitor:
+    uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
+    with:
+      stack_name: MyAppStack        # CloudFormation stack name
+      aws_region: ap-northeast-1   # AWS region
+      # log_group_name: "MyAppStack-MyLogGroup*"  # Optional: CloudWatch log group prefix
+      # hang_threshold_minutes: 10                # Optional: default 10
+      # auto_cancel: false                        # Optional: set true to enable auto-cancel
+    secrets:
+      aws_role_arn: ${{ secrets.CDK_DEPLOY_ROLE_ARN }}
