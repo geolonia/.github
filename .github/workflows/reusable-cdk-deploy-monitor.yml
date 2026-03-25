@@ -31,6 +31,11 @@ on:
         type: boolean
         required: false
         default: false
+      environment_name:
+        description: "GitHub Actions environment name to use for this job (grants access to environment-scoped secrets; leave empty for repo-level secrets only)"
+        type: string
+        required: false
+        default: ""
     secrets:
       aws_role_arn:
         description: "OIDC IAM role ARN with cloudformation:DescribeStackEvents, DescribeStacks, CancelUpdateStack, and logs read permissions (see CdkDeployMonitor permission bundle)"
@@ -44,6 +49,7 @@ jobs:
   monitor:
     name: Monitor CDK deploy (${{ inputs.stack_name }})
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
     timeout-minutes: 120
     steps:
       - name: Configure AWS credentials (OIDC)
