@@ -44,6 +44,7 @@ on:
 permissions:
   id-token: write
   contents: write
+  models: read
 
 jobs:
   monitor:
