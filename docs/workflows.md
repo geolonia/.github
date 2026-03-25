@@ -188,8 +188,9 @@ jobs:
       aws_role_arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/YOUR_DEPLOY_ROLE
 ```
 
-Also add `pull-requests: write` to the calling workflow's top-level `permissions:` block
-so the monitor can post commit comments.
+Also add `contents: write` and `pull-requests: write` to the calling workflow's top-level
+`permissions:` block. The monitor uses the commit comments API (requires `contents: write`)
+and may annotate pull requests (requires `pull-requests: write`).
 
 ### Input reference
 
@@ -228,8 +229,9 @@ Confirm `hang_threshold_minutes` is not set too high relative to your GH Actions
 timeout. Check the `Monitor stack` step logs for `[HH:MM:SS] Stack status:` lines.
 
 **Commit comment not posted:**
-Ensure the calling workflow has `pull-requests: write` in its `permissions:` block.
-Without it, the GITHUB_TOKEN passed to the reusable workflow will lack the required scope.
+Ensure the calling workflow has `contents: write` in its `permissions:` block (commit
+comments require write access to repository contents). Also add `pull-requests: write`
+if you want AI verdicts to appear on pull request timelines.
 
 **`cancel-update-stack` returns an error:**
 The stack may have already reached a terminal state between the AI analysis and the
