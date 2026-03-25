@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
 
           HANG_THRESHOLD_SECONDS=$(( HANG_THRESHOLD_MINUTES * 60 ))
-          LAST_EVENT_TIME=0
+          LAST_EVENT_TIME=$(date -u +%s)
 
           TERMINAL_STATUSES="CREATE_COMPLETE UPDATE_COMPLETE DELETE_COMPLETE \
             CREATE_FAILED UPDATE_FAILED DELETE_FAILED \
@@ -116,11 +116,7 @@ jobs:
                 || echo "$LAST_EVENT_TIME")
 
               if [[ "$LATEST_EPOCH" -gt "$LAST_EVENT_TIME" ]]; then
-                if [[ "$LAST_EVENT_TIME" -eq 0 ]]; then
-                  echo "Initialized hang timer from last CF event: $LATEST_EVENT_TS"
-                else
-                  echo "New event at $LATEST_EVENT_TS -- resetting hang timer."
-                fi
+                echo "New event at $LATEST_EVENT_TS -- resetting hang timer."
                 LAST_EVENT_TIME=$LATEST_EPOCH
               fi
             fi
@@ -140,7 +136,7 @@ jobs:
           done
 
       - name: Analyse hang with AI and act
-        if: always()
+        if: always() && !cancelled()
         env:
           STACK_NAME: ${{ inputs.stack_name }}
           AWS_REGION: ${{ inputs.aws_region }}
@@ -247,7 +243,7 @@ jobs:
           done
 
       - name: Cancel stack update (if verdict is CANCEL and auto_cancel is true)
-        if: always()
+        if: always() && !cancelled()
         env:
           STACK_NAME: ${{ inputs.stack_name }}
           AWS_REGION: ${{ inputs.aws_region }}

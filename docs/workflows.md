@@ -218,7 +218,7 @@ Start with `auto_cancel: false` to validate AI judgements over a few real deploy
 PII, or other sensitive data. Log content is sent to the GitHub Models API (Azure-hosted
 OpenAI service) and is also visible in the commit comment. When in doubt, omit the input.
 
-### Troubleshooting
+### Troubleshooting the deploy monitor
 
 **Monitor exits immediately without analysing:**
 The stack may have already reached a terminal state before the first poll. This is normal

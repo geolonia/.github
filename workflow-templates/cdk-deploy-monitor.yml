@@ -6,6 +6,9 @@
 #   1. Set CDK_DEPLOY_ROLE_ARN secret in your repo (the same OIDC role used for CDK deploy,
 #      with CdkDeployMonitor permissions added -- see docs/workflows.md in geolonia/.github).
 #   2. Replace stack_name and aws_region with your values.
+#   3. Add these permissions to your workflow's top-level permissions block:
+#        contents: write      # required for commit comments
+#        pull-requests: write # required for PR annotations
 
 jobs:
   # ... your existing deploy job here ...
