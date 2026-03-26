@@ -257,7 +257,7 @@ jobs:
             REQUEST_BODY=$(jq -n \
               --arg prompt "$PROMPT" \
               '{model:"gpt-4o",messages:[
-                {role:"system",content:"You are a senior DevOps engineer monitoring an AWS CloudFormation/ECS deployment in real time. You see the stack status, recent CloudFormation events, and recent application logs on every check. Be concise and decisive."},
+                {role:"system",content:"You are a senior DevOps engineer monitoring an AWS CloudFormation/ECS deployment in real time. You see the stack status, recent CloudFormation events, and recent application logs on every check. Be concise and decisive.\n\nKey rules:\n- ECS rolling deploys normally produce NO CloudFormation events for 10-20 minutes while waiting for new tasks to pass health checks. This is expected behaviour — do NOT treat silence alone as stuck.\n- Only recommend CANCEL if the minutes since last CF event have clearly exceeded the operator hang threshold, OR if there is a definitive unrecoverable error (e.g. missing secret, OOM, crash loop with no fix possible).\n- Transient ELB health check failures on newly started tasks are normal during a rolling deploy startup window. Do not cancel based on these alone."},
                 {role:"user",content:("Is this deployment progressing normally, or is it stuck/failing and needs to be cancelled?\n\n" + $prompt + "\n\nReply with CONTINUE or CANCEL on the first line, followed by one sentence explaining why.")}
               ],max_tokens:150}')
 
