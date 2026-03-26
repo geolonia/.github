@@ -134,12 +134,13 @@ policy allows the `geolonia` GitHub org.
 ## CDK Deploy Monitor (`reusable-cdk-deploy-monitor.yml`)
 
 Runs as a parallel job alongside a CDK deploy. On every poll cycle it fetches the
-CloudFormation stack status, recent CloudFormation events, and recent CloudWatch logs,
-then asks the GitHub Models AI (GPT-4o) whether the deployment is progressing normally
-or is stuck. The AI verdict is logged to the job output; a CANCEL verdict is also posted
-as a commit comment. If `auto_cancel` is enabled and the AI says CANCEL, the workflow
-calls `cancel-update-stack`, triggering a rollback and causing the deploy job to fail
-cleanly instead of timing out.
+CloudFormation stack status, recent CloudFormation events, recent CloudWatch logs, and
+recently stopped ECS task diagnostics (exit codes and stopped reasons), then asks the
+GitHub Models AI (GPT-4o) whether the deployment is progressing normally or is stuck.
+The AI verdict is logged to the job output; a CANCEL verdict is also posted as a commit
+comment. If `auto_cancel` is enabled and the AI says CANCEL, the workflow calls
+`cancel-update-stack`, triggering a rollback and causing the deploy job to fail cleanly
+instead of timing out.
 
 ### When to use it
 
@@ -163,10 +164,13 @@ bundle (defined in `geolonia-infra-cdk`):
   "Action": [
     "cloudformation:DescribeStackEvents",
     "cloudformation:DescribeStacks",
+    "cloudformation:DescribeStackResources",
     "logs:DescribeLogGroups",
     "logs:DescribeLogStreams",
     "logs:FilterLogEvents",
-    "logs:GetLogEvents"
+    "logs:GetLogEvents",
+    "ecs:ListTasks",
+    "ecs:DescribeTasks"
   ],
   "Resource": "*"
 }
@@ -202,7 +206,7 @@ jobs:
     # ... your existing deploy job, unchanged
 
   monitor:
-    uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1.5
+    uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
     with:
       stack_name: MyAppStack
       aws_region: ap-northeast-1
@@ -210,14 +214,28 @@ jobs:
       hang_threshold_minutes: 10                 # optional, default: 10
       auto_cancel: false                         # optional, default: false
     secrets:
-      aws_role_arn: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/YOUR_DEPLOY_ROLE
+      aws_role_arn: ${{ needs.build-and-push.outputs.monitor_role_arn }}
 ```
 
-> **Note:** Use `${{ env.AWS_ACCOUNT_ID }}` (not `${{ secrets.AWS_ACCOUNT_ID }}`) when
-> constructing the ARN. The `secrets` context does not resolve correctly inside the
-> `secrets:` block of a reusable workflow call when the calling workflow is itself a
-> reusable workflow. Set `AWS_ACCOUNT_ID` as a workflow-level `env:` var from the secret,
-> then reference it via `env`.
+> **Note on passing the role ARN:** The `secrets:` block of a reusable workflow call
+> does not have access to the `env` context. The recommended pattern is to construct the
+> full ARN in a preceding job that has `environment: production` (where `vars.AWS_ACCOUNT_ID`
+> resolves correctly), expose it as a job output, and pass it via `needs.<job>.outputs.<key>`.
+>
+> ```yaml
+> jobs:
+>   build-and-push:
+>     environment: production
+>     outputs:
+>       monitor_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-cdk-deploy-myapp
+>     steps: [...]
+>
+>   monitor:
+>     needs: build-and-push
+>     uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
+>     secrets:
+>       aws_role_arn: ${{ needs.build-and-push.outputs.monitor_role_arn }}
+> ```
 
 ### Input reference
 
@@ -240,11 +258,26 @@ jobs:
 
 Start with `auto_cancel: false` to validate AI judgements over a few real deploys before enabling `true`.
 
+### ECS task diagnostics
+
+The monitor automatically looks up the ECS service belonging to the monitored CloudFormation
+stack using `cloudformation:DescribeStackResources`. On each poll cycle it also fetches
+recently stopped ECS tasks (exit codes and stopped reasons) and includes them in the AI
+prompt. This lets the AI explain *why* a deployment is stuck — for example a missing
+environment variable, an OOM kill, or a failing health check — rather than just reporting
+that no CloudFormation events have occurred.
+
+No extra configuration is needed. The monitor silently skips ECS diagnostics if the stack
+contains no ECS service resource.
+
 ### Log sensitivity warning
 
 **Do not set `log_group_name`** if your application logs may contain secrets, credentials,
 PII, or other sensitive data. Log content is sent to the GitHub Models API (Azure-hosted
 OpenAI service) and is also visible in the commit comment. When in doubt, omit the input.
+
+The same applies to ECS stopped task reasons — if task environment variables or startup
+errors may reveal sensitive information, be aware that this data is also sent to the AI.
 
 ### Troubleshooting the deploy monitor
 
