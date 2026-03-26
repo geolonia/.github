@@ -38,7 +38,7 @@ on:
         default: ""
     secrets:
       aws_role_arn:
-        description: "OIDC IAM role ARN with cloudformation:DescribeStackEvents, DescribeStacks, CancelUpdateStack, and logs read permissions (see CdkDeployMonitor permission bundle)"
+        description: "OIDC IAM role ARN with cloudformation:DescribeStacks, DescribeStackEvents, DescribeStackResources, CancelUpdateStack, logs:FilterLogEvents, DescribeLogGroups, ecs:ListTasks, DescribeTasks permissions (see CdkDeployMonitor permission bundle)"
         required: true
 
 permissions:
@@ -102,6 +102,30 @@ jobs:
             else
               echo "Log group: $RESOLVED_LOG_GROUP"
             fi
+          fi
+
+          # Look up ECS service and cluster from the CloudFormation stack resources.
+          # This allows the monitor to fetch stopped task diagnostics (exit codes,
+          # stopped reasons) without needing them passed as explicit inputs.
+          ECS_SERVICE_ARN=""
+          ECS_CLUSTER=""
+          CF_RESOURCES=$(aws cloudformation describe-stack-resources \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --output json 2>/dev/null || echo '{"StackResources":[]}')
+          ECS_SERVICE_ARN=$(echo "$CF_RESOURCES" | \
+            jq -r '.StackResources[] | select(.ResourceType=="AWS::ECS::Service") | .PhysicalResourceId' \
+            | head -1)
+          if [[ -n "$ECS_SERVICE_ARN" ]]; then
+            # New ARN format embeds cluster: arn:aws:ecs:region:account:service/cluster/service-name
+            SLASH_COUNT=$(echo "$ECS_SERVICE_ARN" | tr -cd '/' | wc -c)
+            if [[ "$SLASH_COUNT" -ge 2 ]]; then
+              ECS_CLUSTER=$(echo "$ECS_SERVICE_ARN" | cut -d'/' -f2)
+            fi
+            echo "ECS service: $ECS_SERVICE_ARN"
+            echo "ECS cluster: ${ECS_CLUSTER:-unknown (old ARN format)}"
+          else
+            echo "No ECS service found in stack -- ECS diagnostics disabled."
           fi
 
           # If the stack is already in a terminal state when the monitor starts,
@@ -186,6 +210,29 @@ jobs:
                 --output text 2>/dev/null | tail -50 || echo "")
             fi
 
+            # Fetch recently stopped ECS tasks for failure diagnostics.
+            # Stopped tasks contain the reason the container exited (e.g. missing
+            # env variable, OOM, health check failure) which the AI can use to
+            # explain why a deployment is not progressing.
+            ECS_STOPPED_TASKS=""
+            if [[ -n "$ECS_SERVICE_ARN" && -n "$ECS_CLUSTER" ]]; then
+              STOPPED_TASK_ARNS=$(aws ecs list-tasks \
+                --cluster "$ECS_CLUSTER" \
+                --service-name "$ECS_SERVICE_ARN" \
+                --desired-status STOPPED \
+                --region "$AWS_REGION" \
+                --query 'taskArns[:5]' \
+                --output json 2>/dev/null || echo "[]")
+              if [[ "$(echo "$STOPPED_TASK_ARNS" | jq 'length')" -gt 0 ]]; then
+                ECS_STOPPED_TASKS=$(aws ecs describe-tasks \
+                  --cluster "$ECS_CLUSTER" \
+                  --tasks $(echo "$STOPPED_TASK_ARNS" | jq -r '.[]') \
+                  --region "$AWS_REGION" \
+                  --query 'tasks[*].{stoppedAt:stoppedAt,stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}' \
+                  --output json 2>/dev/null || echo "[]")
+              fi
+            fi
+
             # Build AI prompt
             CF_EVENTS_TRIMMED=$(echo "$CF_EVENTS" | head -c 4000)
             PROMPT="Stack: $STACK_NAME ($STACK_STATUS)"$'\n'
@@ -195,6 +242,10 @@ jobs:
             if [[ -n "$CW_LOGS" ]]; then
               CW_LOGS_TRIMMED=$(echo "$CW_LOGS" | head -c 3000)
               PROMPT+=$'\n\n'"Recent application logs (last ~${POLL_INTERVAL_SECONDS}s):"$'\n'"$CW_LOGS_TRIMMED"
+            fi
+            if [[ -n "$ECS_STOPPED_TASKS" && "$ECS_STOPPED_TASKS" != "[]" ]]; then
+              ECS_TRIMMED=$(echo "$ECS_STOPPED_TASKS" | head -c 2000)
+              PROMPT+=$'\n\n'"Recently stopped ECS tasks (exit codes and reasons):"$'\n'"$ECS_TRIMMED"
             fi
 
             # Call AI
