@@ -156,7 +156,7 @@ GH Actions timeouts due to hanging CloudFormation updates.
 ### Required IAM permissions for `aws_role_arn`
 
 The OIDC role passed as `aws_role_arn` must include the `CdkDeployMonitor` permission
-bundle (defined in `geolonia-infra-cdk`):
+bundle (defined in `geolonia-infra-cdk`), which covers both monitoring and cancellation:
 
 ```json
 {
@@ -165,6 +165,7 @@ bundle (defined in `geolonia-infra-cdk`):
     "cloudformation:DescribeStackEvents",
     "cloudformation:DescribeStacks",
     "cloudformation:DescribeStackResources",
+    "cloudformation:CancelUpdateStack",
     "logs:DescribeLogGroups",
     "logs:DescribeLogStreams",
     "logs:FilterLogEvents",
@@ -176,19 +177,8 @@ bundle (defined in `geolonia-infra-cdk`):
 }
 ```
 
-To enable `auto_cancel: true`, also attach the `CdkDeployMonitorCancel` bundle:
-
-```json
-{
-  "Effect": "Allow",
-  "Action": ["cloudformation:CancelUpdateStack"],
-  "Resource": "*"
-}
-```
-
 For repos using `geolonia-infra-cdk` to manage their deploy role, add
-`permissionBundles: ['CdkDeployMonitor']` (and `'CdkDeployMonitorCancel'` when using
-`auto_cancel: true`) to the role entry in the account config.
+`permissionBundles: ['CdkDeployMonitor']` to the role entry in the account config.
 
 ### Example integration
 
