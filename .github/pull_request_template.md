@@ -1,4 +1,4 @@
-Fixes #<issue_number>
+Refs #<issue_number>
 
 ## Summary
 
