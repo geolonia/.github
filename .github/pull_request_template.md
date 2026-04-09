@@ -1,5 +1,3 @@
-Refs #<issue_number>
-
 ## Summary
 
 <!-- Briefly describe your changes -->
@@ -8,3 +6,7 @@ Refs #<issue_number>
 
 - [ ] Tests added/updated
 - [ ] Docs updated
+
+## Related Issues
+
+<!-- fill all issues that is related to this PR -->
