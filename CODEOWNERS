@@ -6,3 +6,9 @@
 
 # Team access configuration
 catalog-info.yaml @geolonia/operations
+
+# CI/CD pipelines
+# .github/workflows/ @geolonia/operations
+
+# Licensing
+# LICENSE @geolonia/legal
