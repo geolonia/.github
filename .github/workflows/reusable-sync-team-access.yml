@@ -99,21 +99,22 @@ jobs:
         shell: bash
         run: |
 
-          # Build the dispatch payload
-          PAYLOAD=$(jq -n \
+          # Build the full request body with client_payload as an object
+          REQUEST_BODY=$(jq -n \
             --arg repo "$REPO_FULL" \
             --arg sha "$COMMIT_SHA" \
             --arg owner "$OWNER" \
             --argjson grants "$GRANTS" \
             '{
-              source_repo: $repo,
-              commit_sha: $sha,
-              spec_owner: $owner,
-              access_grants: $grants
+              event_type: "sync-team-access",
+              client_payload: {
+                source_repo: $repo,
+                commit_sha: $sha,
+                spec_owner: $owner,
+                access_grants: $grants
+              }
             }')
 
-          gh api "repos/${TARGET}/dispatches" \
-            -f event_type="sync-team-access" \
-            -f "client_payload=${PAYLOAD}"
+          echo "$REQUEST_BODY" | gh api "repos/${TARGET}/dispatches" --input -
 
           echo "::notice::Dispatched sync request to ${TARGET} for ${REPO_FULL}@${COMMIT_SHA:0:7}"
