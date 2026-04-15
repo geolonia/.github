@@ -1,0 +1,8 @@
+# Default code owners for all repositories in the geolonia organization.
+# Repos can override by adding their own CODEOWNERS file.
+#
+# Note: This only auto-assigns reviewers. It does NOT block merges unless
+# "Require review from Code Owners" is enabled in branch protection rules.
+
+# Team access configuration
+catalog-info.yaml @geolonia/operations
