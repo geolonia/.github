@@ -18,8 +18,8 @@ on:
         required: false
         default: ""
     secrets:
-      OPS_DISPATCH_APP_ID:
-        description: "Operations-Geolonia GitHub App ID (dispatches events to geolonia-operations)"
+      OPS_DISPATCH_CLIENT_ID:
+        description: "Operations-Geolonia GitHub App Client ID (dispatches events to geolonia-operations)"
         required: true
       OPS_DISPATCH_APP_PRIVATE_KEY:
         description: "Operations-Geolonia GitHub App private key"
@@ -83,7 +83,7 @@ jobs:
         id: app_token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.OPS_DISPATCH_APP_ID }}
+          client-id: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
           private-key: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
           repositories: ${{ steps.target.outputs.repo_name }}
           owner: ${{ github.repository_owner }}
