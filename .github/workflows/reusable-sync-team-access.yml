@@ -1,0 +1,119 @@
+name: "[REUSABLE] Sync Team Access - Dispatch"
+
+# This workflow reads catalog-info.yaml and dispatches a sync request to a
+# centralized repository that holds the org-level credentials. Individual repos
+# never see the org-admin token.
+
+on:
+  workflow_call:
+    inputs:
+      catalog_info_path:
+        description: "Path to catalog-info.yaml in the repository"
+        type: string
+        required: false
+        default: "catalog-info.yaml"
+      dispatch_repo:
+        description: "Repository that processes sync requests (owner/repo)"
+        type: string
+        required: false
+        default: ""
+    secrets:
+      OPS_DISPATCH_APP_ID:
+        description: "Operations-Geolonia GitHub App ID (dispatches events to geolonia-operations)"
+        required: true
+      OPS_DISPATCH_APP_PRIVATE_KEY:
+        description: "Operations-Geolonia GitHub App private key"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Parse catalog-info.yaml and dispatch sync request
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install yq
+        uses: mikefarah/yq@v4
+
+      - name: Parse catalog-info.yaml
+        id: parse
+        shell: bash
+        env:
+          CATALOG_PATH: ${{ inputs.catalog_info_path }}
+        run: |
+          if [ ! -f "$CATALOG_PATH" ]; then
+            echo "::error::$CATALOG_PATH not found"
+            exit 1
+          fi
+
+          # Extract owner team (keep full Backstage ref for the central processor)
+          RAW_OWNER=$(yq '.spec.owner' "$CATALOG_PATH")
+          if [ -z "$RAW_OWNER" ] || [ "$RAW_OWNER" = "null" ]; then
+            echo "::error::spec.owner is not set in $CATALOG_PATH"
+            exit 1
+          fi
+          echo "owner=$RAW_OWNER" >> "$GITHUB_OUTPUT"
+
+          # Extract access grants as compact JSON
+          GRANTS=$(yq -o=json -I=0 '.spec.accessGrants // []' "$CATALOG_PATH")
+          echo "grants=$GRANTS" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve dispatch target repo name
+        id: target
+        env:
+          DISPATCH_REPO: ${{ inputs.dispatch_repo }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          if [ -n "$DISPATCH_REPO" ]; then
+            # Extract repo name from owner/repo format
+            REPO_NAME="${DISPATCH_REPO##*/}"
+          else
+            REPO_NAME="geolonia-operations"
+          fi
+          echo "repo_name=$REPO_NAME" >> "$GITHUB_OUTPUT"
+          echo "full=${DISPATCH_REPO:-${REPO_OWNER}/geolonia-operations}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate dispatch token
+        id: app_token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OPS_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
+          repositories: ${{ steps.target.outputs.repo_name }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Dispatch sync request
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          TARGET: ${{ steps.target.outputs.full }}
+          REPO_FULL: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          OWNER: ${{ steps.parse.outputs.owner }}
+          GRANTS: ${{ steps.parse.outputs.grants }}
+        shell: bash
+        run: |
+
+          # Build the dispatch payload
+          PAYLOAD=$(jq -n \
+            --arg repo "$REPO_FULL" \
+            --arg sha "$COMMIT_SHA" \
+            --arg owner "$OWNER" \
+            --argjson grants "$GRANTS" \
+            '{
+              source_repo: $repo,
+              commit_sha: $sha,
+              spec_owner: $owner,
+              access_grants: $grants
+            }')
+
+          gh api "repos/${TARGET}/dispatches" \
+            -f event_type="sync-team-access" \
+            -f "client_payload=${PAYLOAD}"
+
+          echo "::notice::Dispatched sync request to ${TARGET} for ${REPO_FULL}@${COMMIT_SHA:0:7}"

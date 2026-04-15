@@ -1,0 +1,6 @@
+{
+  "name": "Sync Team Access",
+  "description": "Syncs catalog-info.yaml ownership and access grants to GitHub team permissions on push to main.",
+  "iconName": "lock",
+  "categories": ["Automation", "Access Control"]
+}
