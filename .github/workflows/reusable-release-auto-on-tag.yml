@@ -103,7 +103,9 @@ jobs:
           if gh release view "$TAG" &>/dev/null; then
             echo "Release $TAG already exists, skipping"
           else
-            args=("$TAG" --title "$TAG")
+            # --latest=legacy lets GitHub pick the highest semver as "Latest"
+            # instead of defaulting to the most recently created release.
+            args=("$TAG" --title "$TAG" --latest=legacy)
             [[ "$GENERATE_NOTES" == "true" ]] && args+=(--generate-notes)
             [[ "$PRERELEASE"     == "true" ]] && args+=(--prerelease)
             gh release create "${args[@]}"
