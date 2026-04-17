@@ -107,6 +107,17 @@ jobs:
             [[ "$GENERATE_NOTES" == "true" ]] && args+=(--generate-notes)
             [[ "$PRERELEASE"     == "true" ]] && args+=(--prerelease)
             gh release create "${args[@]}"
+            # gh release create's --latest flag is boolean-only; use the REST
+            # API to set make_latest=legacy so GitHub picks the highest semver
+            # as "Latest" instead of defaulting to the most recently created
+            # release.
+            if [[ "$PRERELEASE" != "true" ]]; then
+              RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id')
+              gh api \
+                --method PATCH \
+                "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+                -f make_latest=legacy >/dev/null
+            fi
           fi
 
       - name: Generate GitHub App token
