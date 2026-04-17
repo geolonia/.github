@@ -124,7 +124,7 @@ jobs:
         id: app_token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.WORKFLOWS_APP_ID }}
+          client-id: ${{ secrets.WORKFLOWS_CLIENT_ID }}
           private-key: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
 
       - name: Use App token for pushes
