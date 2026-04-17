@@ -103,12 +103,20 @@ jobs:
           if gh release view "$TAG" &>/dev/null; then
             echo "Release $TAG already exists, skipping"
           else
-            # --latest=legacy lets GitHub pick the highest semver as "Latest"
-            # instead of defaulting to the most recently created release.
-            args=("$TAG" --title "$TAG" --latest=legacy)
+            args=("$TAG" --title "$TAG")
             [[ "$GENERATE_NOTES" == "true" ]] && args+=(--generate-notes)
             [[ "$PRERELEASE"     == "true" ]] && args+=(--prerelease)
             gh release create "${args[@]}"
+            # gh release create's --latest flag is boolean-only; use the REST
+            # API to set make_latest=legacy so GitHub picks the highest semver
+            # as "Latest" instead of defaulting to the most recently created
+            # release.
+            if [[ "$PRERELEASE" != "true" ]]; then
+              gh api \
+                --method PATCH \
+                "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+                -f make_latest=legacy >/dev/null
+            fi
           fi
 
       - name: Generate GitHub App token
