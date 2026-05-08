@@ -8,7 +8,16 @@ reviews:
   collapse_walkthrough: false
   auto_review:
     enabled: true
-    auto_incremental_review: false
+    auto_incremental_review: true
+  path_filters:
+    - "!**/pnpm-lock.yaml"
+    - "!**/yarn.lock"
+    - "!**/package-lock.json"
+    - "!**/dist/**"
+    - "!**/cdk.out/**"
+    - "!**/coverage/**"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
   tools:
     shellcheck:
       enabled: true
@@ -20,5 +29,9 @@ reviews:
       enabled: true
       enabled_only: false
       level: default
+    markdownlint:
+      enabled: true
+    hadolint:
+      enabled: true
 chat:
   auto_reply: true
