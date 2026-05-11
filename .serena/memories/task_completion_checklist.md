@@ -22,8 +22,9 @@ saves a review round.
 
 ## 3. Em-dash check
 
-This repo's `AGENTS.md` forbids em-dashes (`-`) anywhere - markdown,
-YAML, commit messages, PR text. Verify:
+This repo's `AGENTS.md` forbids the em-dash character (Unicode
+codepoint U+2014) anywhere - markdown, YAML, commit messages, PR
+text. See `code_style` for the longer rationale. Verify:
 
 ```sh
 git diff --cached | grep $'\xe2\x80\x94' && echo "FAIL: U+2014 present" || echo "OK"

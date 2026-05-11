@@ -1,7 +1,7 @@
 # Shared CodeRabbit config - this repo is the canonical source
 
 Every Geolonia repo's CodeRabbit review settings come from
-[`.coderabbit.yaml`](../.coderabbit.yaml) in **this repo**. Other repos
+[`.coderabbit.yaml`](../../.coderabbit.yaml) in **this repo**. Other repos
 contain only a 2-line pointer:
 
 ```yaml

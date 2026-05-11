@@ -16,6 +16,12 @@ locations** in this repo plus a **tag-pinning convention** in callers.
 - **`publish-techdocs`** - TechDocs publish on `docs/**` or `mkdocs.yml`
   changes. Uses OIDC for AWS, with `TECHDOCS_AWS_ACCOUNT_ID` org secret
   by default; per-repo `AWS_ACCOUNT_ID` override supported.
+  **Naming asymmetry**: the template + entrypoint pair are
+  `publish-techdocs.yml`, but the reusable file is
+  `reusable-backstage-techdocs.yml`, not `reusable-publish-techdocs.yml`
+  as the convention in the table above would predict. Consumers `uses:`
+  the reusable filename, so any reference must spell out
+  `reusable-backstage-techdocs.yml`.
 - **`release-auto-on-tag`** - semver-tag-triggered releases (`v*.*.*`).
   Optional inputs control prereleases, release notes, custom regex.
 - **`cdk-deploy-monitor`** - runs alongside a CDK deploy job, polls
