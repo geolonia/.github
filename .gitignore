@@ -1,2 +1,3 @@
-# Serena (local, personal)
-.serena/
+# Serena - track .serena/project.yml + memories/ so teammates share project
+# config and onboarding context. The inner .serena/.gitignore excludes the
+# local-only bits (cache/ + project.local.yml).
