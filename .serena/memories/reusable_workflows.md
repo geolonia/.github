@@ -44,6 +44,7 @@ When making **non-breaking** changes:
 2. Open a PR. Wait for CodeRabbit + human approval.
 3. Merge to `main`.
 4. Move the `v1` tag forward (or whatever major tag is active):
+
    ```sh
    git tag -f v1
    git push -f origin v1

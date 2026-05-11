@@ -1,6 +1,6 @@
 # Project structure
 
-```
+```text
 .
 ├── profile/
 │   └── README.md                         Org profile shown on github.com/geolonia

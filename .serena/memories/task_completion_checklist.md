@@ -26,7 +26,7 @@ This repo's `AGENTS.md` forbids em-dashes (`-`) anywhere - markdown,
 YAML, commit messages, PR text. Verify:
 
 ```sh
-git diff --cached | grep -E '\xe2\x80\x94' && echo "FAIL: em-dash present" || echo "OK"
+git diff --cached | grep $'\xe2\x80\x94' && echo "FAIL: U+2014 present" || echo "OK"
 ```
 
 If you composed the PR body or issue body in a tool that auto-substitutes

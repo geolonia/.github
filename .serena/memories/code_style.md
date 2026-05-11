@@ -16,7 +16,9 @@ Repo is markdown + YAML. The hard rules are short.
 
 ## **No em-dashes** (org-wide rule)
 
-The repo's `AGENTS.md` explicitly states: **"Must not use long dash `-`"**.
+The repo's `AGENTS.md` forbids the em-dash character (Unicode
+codepoint U+2014, the long dash that some editors auto-substitute
+for `--`).
 
 Applies to:
 
@@ -28,10 +30,12 @@ Applies to:
 
 Use a hyphen `-` or rephrase the sentence instead. This rule appears
 to be unique to this repo (other Geolonia repos don't enforce it), so
-when working **here** specifically, run a final check before pushing:
+when working **here** specifically, run a final check before pushing.
+Bash `$'...'` expansion materialises the hex bytes before grep sees
+them, so this works on both BSD (macOS) and GNU grep:
 
 ```sh
-git diff --cached | grep -E '\xe2\x80\x94' && echo "FAIL: em-dash present" || echo "OK"
+git diff --cached | grep $'\xe2\x80\x94' && echo "FAIL: U+2014 present" || echo "OK"
 ```
 
 ## YAML
