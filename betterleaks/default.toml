@@ -51,9 +51,10 @@ regexes = [
 ]
 
 [[allowlists]]
-description = "Angle-bracket placeholders: <your-token>, <api-key>, <endpoint-url>"
+description = "Angle-bracket placeholders: <your-token>, <api-key>, <endpoint-url> (incl. Japanese)"
 regexes = [
-  '''<[A-Za-z\p{Han}\p{Hiragana}\p{Katakana}][^>]{1,60}>''',
+  # Inner-char ranges: ASCII letter | Hiragana | Katakana | CJK Unified Ideographs
+  '''<[A-Za-z\x{3040}-\x{309F}\x{30A0}-\x{30FF}\x{4E00}-\x{9FFF}][^>]{1,60}>''',
 ]
 
 [[allowlists]]
@@ -67,13 +68,12 @@ regexes = [
 [[allowlists]]
 description = "Standard placeholder words: REPLACE_ME / EXAMPLE / PLACEHOLDER / CHANGEME"
 regexes = [
-  '''(?i)\b(REPLACE[-_]?ME|CHANGE[-_]?ME|PLACEHOLDER|EXAMPLE[-_]?(KEY|TOKEN|SECRET)?|FAKE[-_]?(KEY|TOKEN|SECRET)?|SAMPLE[-_]?(KEY|TOKEN|SECRET))\b''',
+  '''(?i)\b(REPLACE[-_]?ME|CHANGE[-_]?ME|PLACEHOLDER|EXAMPLE[-_]?(KEY|TOKEN|SECRET)?|FAKE[-_]?(KEY|TOKEN|SECRET)?|SAMPLE[-_]?(KEY|TOKEN|SECRET)?)\b''',
 ]
 
 [[allowlists]]
-description = "Obvious dev / test scaffold tokens"
+description = "Obvious dev / test scaffold tokens (must include credential context)"
 regexes = [
   '''(?i)\bdev[-_]?local[-_]?token[-_]?please[-_]?change\b''',
-  '''(?i)\bplease[-_]?(change|update|replace|rotate)\b''',
   '''(?i)\b(test|sample|dummy|dev|stub)[-_]?(token|key|secret|password)[-_]?(here|value)?\b''',
 ]
