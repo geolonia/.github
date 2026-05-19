@@ -1,0 +1,40 @@
+# Example pre-commit-framework config for the Geolonia org.
+#
+# Drop this file at the root of your repository as `.pre-commit-config.yaml`,
+# then run once per laptop:
+#
+#   pip install pre-commit         # or: brew install pre-commit
+#   pre-commit install
+#
+# After that, `git commit` runs Betterleaks on the staged diff and refuses
+# to create the commit if a secret is detected. The same rule set as the
+# per-PR Secret Leak Check, so feedback is consistent between the two.
+#
+# Bypass for the rare case it really needs to commit despite the warning
+# (e.g. you are intentionally adding a test fixture):
+#
+#   git commit --no-verify
+#
+# Server-side enforcement still catches it on the PR if push protection
+# or the per-PR scan are enabled.
+
+repos:
+  - repo: https://github.com/betterleaks/betterleaks
+    # Pin to the same version as the per-PR Secret Leak Check workflow.
+    # Bump both together so local and CI use identical rule shapes.
+    rev: v1.2.0
+    hooks:
+      # Docker variant. Works without a local Go/Rust toolchain. The image
+      # is pulled on first use and cached. Mac/Linux developers typically
+      # already have Docker for the CDK / n8n / Datastore work.
+      - id: betterleaks-docker
+
+      # Alternatives (uncomment one if Docker is not an option):
+      #
+      # `betterleaks` (language: golang) — builds from source. Requires a
+      # local Go toolchain. Fastest after the first build.
+      # - id: betterleaks
+      #
+      # `betterleaks-system` (language: system) — expects the binary on
+      # PATH. Install once with `brew install betterleaks`.
+      # - id: betterleaks-system
