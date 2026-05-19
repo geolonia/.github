@@ -1,0 +1,38 @@
+# Minimal betterleaks config — only the highest-signal token-shape
+# detectors are enabled. Use this in noisy, legacy, or test-heavy repos
+# where most findings have historically been false positives and the
+# only thing worth catching is a clearly-real credential.
+#
+# What stays on:
+#
+#   - aws-access-token
+#   - anthropic-api-key
+#   - private-key
+#   - slack-bot-token
+#   - stripe-access-token
+#   - github-app-token
+#   - github-personal-access-token
+#   - gcp-service-account
+#
+# What gets dropped (vs default):
+#
+#   - generic-api-key (already off org-wide)
+#   - curl-auth-header, curl-auth-user (docs examples)
+#   - jwt (sample tokens in docs)
+#   - slack-webhook-url, sourcegraph-access-token, hashicorp-tf-password
+#
+# Trade-off: misses real findings whose token shape is not listed
+# above. Only adopt this if you have explicitly audited which rules
+# matter for your repo.
+
+[extend]
+useDefault = true
+disabledRules = [
+  "generic-api-key",
+  "curl-auth-header",
+  "curl-auth-user",
+  "jwt",
+  "slack-webhook-url",
+  "sourcegraph-access-token",
+  "hashicorp-tf-password",
+]
