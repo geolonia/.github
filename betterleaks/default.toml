@@ -34,3 +34,46 @@
 [extend]
 useDefault = true
 disabledRules = ["generic-api-key"]
+
+# Org-wide allowlist: patterns that are unmistakably documentation
+# placeholders, never accidentally matching a real secret. Add new
+# entries here only if they survive a sanity check ("could this regex
+# match a real credential?"). Each entry includes a short rationale.
+#
+# Allowlists match against the captured Secret value (not the
+# surrounding Match), so the regex should describe just the literal
+# placeholder string.
+
+[[allowlists]]
+description = "YOUR_API_KEY / YOUR-API-KEY / YOUR_TOKEN family (API docs templates)"
+regexes = [
+  '''(?i)\bYOUR[-_](API[-_]?KEY|TOKEN|SECRET|CLIENT[-_]?(ID|SECRET))\b''',
+]
+
+[[allowlists]]
+description = "Angle-bracket placeholders: <your-token>, <api-key>, <endpoint-url> (incl. Japanese)"
+regexes = [
+  # Inner-char ranges: ASCII letter | Hiragana | Katakana | CJK Unified Ideographs
+  '''<[A-Za-z\x{3040}-\x{309F}\x{30A0}-\x{30FF}\x{4E00}-\x{9FFF}][^>]{1,60}>''',
+]
+
+[[allowlists]]
+description = "Famous example UUIDs used in API docs"
+regexes = [
+  '''(?i)550e8400-e29b-41d4-a716-446655440000''',
+  '''00000000-0000-0000-0000-000000000000''',
+  '''(?i)deadbeef-dead-beef-dead-beefdeadbeef''',
+]
+
+[[allowlists]]
+description = "Standard placeholder words: REPLACE_ME / EXAMPLE / PLACEHOLDER / CHANGEME"
+regexes = [
+  '''(?i)\b(REPLACE[-_]?ME|CHANGE[-_]?ME|PLACEHOLDER|EXAMPLE[-_]?(KEY|TOKEN|SECRET)?|FAKE[-_]?(KEY|TOKEN|SECRET)?|SAMPLE[-_]?(KEY|TOKEN|SECRET)?)\b''',
+]
+
+[[allowlists]]
+description = "Obvious dev / test scaffold tokens (must include credential context)"
+regexes = [
+  '''(?i)\bdev[-_]?local[-_]?token[-_]?please[-_]?change\b''',
+  '''(?i)\b(test|sample|dummy|dev|stub)[-_]?(token|key|secret|password)[-_]?(here|value)?\b''',
+]
