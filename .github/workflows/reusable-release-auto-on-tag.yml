@@ -45,8 +45,8 @@ on:
         description: "Minor tag (e.g. v1.2)"
         value: ${{ jobs.release.outputs.minor }}
     secrets:
-      WORKFLOWS_APP_ID:
-        description: "GitHub App ID for pushing tags"
+      WORKFLOWS_CLIENT_ID:
+        description: "GitHub App client ID for pushing tags (consumed by actions/create-github-app-token@v3 as `client-id`)."
         required: true
       WORKFLOWS_APP_PRIVATE_KEY:
         description: "GitHub App private key for pushing tags"
