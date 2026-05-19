@@ -2,6 +2,6 @@
   "name": "Publish Backstage TechDocs",
   "description": "Generate and publish Backstage TechDocs to S3 using Geolonia's standard settings (OIDC). Optional per-repo overrides supported.",
   "iconName": "book",
-  "categories": ["Documentation"],
+  "categories": ["Deployment"],
   "filePatterns": ["docs/**", "mkdocs.yml"]
 }
