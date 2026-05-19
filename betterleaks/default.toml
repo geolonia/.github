@@ -1,22 +1,21 @@
-# Org-wide betterleaks config for Geolonia repositories.
+# Org-wide betterleaks config used by the WEEKLY ORG-WIDE AUDIT only.
 #
-# This file is consumed automatically by:
+# Consumed by
+# geolonia/geolonia-operations/.github/workflows/secret-leak-audit.yml,
+# which scans full git history across every active org repo each week.
+# That scan needs the noise-reduced ruleset below, otherwise it would
+# bury us in placeholder hits from the years of accumulated history
+# (see "Why `generic-api-key` is disabled" below).
 #
-#   1. The reusable per-PR scan workflow
-#      (.github/workflows/reusable-secret-leak-check.yml) when the
-#      caller did not pass a `config-path` input.
+# The PER-PR scan does NOT use this file. It runs betterleaks with the
+# built-in default ruleset (every detector on) against the small diff
+# of a single PR, where the noise rate is low and the cost of catching
+# a real leak is highest. Maintainers who need to silence a documented
+# false positive at PR time should commit a `.betterleaks.toml` to
+# their repo root and point the workflow at it via the `config-path`
+# input.
 #
-#   2. The weekly org-wide audit workflow
-#      (geolonia/geolonia-operations/.github/workflows/secret-leak-audit.yml)
-#      via the same fetch-and-fallback pattern.
-#
-# Per-repo overrides:
-#
-#   - Commit a `.betterleaks.toml` at the root of your repository to
-#     extend or replace this config. The reusable workflow auto-detects
-#     it (or you can pass an explicit `config-path` input).
-#
-# Why `generic-api-key` is disabled:
+# Why `generic-api-key` is disabled here:
 #
 #   In our org baseline (May 2026, 708 repos), `generic-api-key`
 #   produced 1,838 of 2,381 findings, with a sample noise rate of
@@ -26,10 +25,7 @@
 #   examples in docs, content hashes, build artifacts. Targeted rules
 #   (`stripe-access-token`, `aws-access-token`, `anthropic-api-key`,
 #   `slack-bot-token`, `jwt`, `private-key`, etc.) catch the same
-#   threat class via specific token shapes and stay enabled. Disabling
-#   `generic-api-key` org-wide cuts the noise without losing real
-#   coverage. A repo that wants the rule on can re-enable it in its
-#   own `.betterleaks.toml`.
+#   threat class via specific token shapes and stay enabled.
 
 [extend]
 useDefault = true
