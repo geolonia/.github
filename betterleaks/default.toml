@@ -77,3 +77,21 @@ regexes = [
   '''(?i)\bdev[-_]?local[-_]?token[-_]?please[-_]?change\b''',
   '''(?i)\b(test|sample|dummy|dev|stub)[-_]?(token|key|secret|password)[-_]?(here|value)?\b''',
 ]
+
+[[allowlists]]
+description = "Truncated JWT placeholder in docs (eyJ... ending in literal '...' ellipsis)"
+regexes = [
+  # Matches the docs convention of showing a JWT prefix followed by a
+  # literal three-dot ellipsis. Real JWTs are never written that way.
+  '''eyJ[A-Za-z0-9_\-]{8,}\.\.\.''',
+]
+
+[[allowlists]]
+description = "Basic-auth label pair literal: client_id:client_secret"
+regexes = [
+  # Appears in OAuth docs and test fixtures across the org as the
+  # `-u "client_id:client_secret"` curl flag or
+  # `Buffer.from('client-id:client-secret').toString('base64')` in
+  # tests. Real Basic-auth credentials are never the words themselves.
+  '''(?i)\bclient[-_]id:client[-_]secret\b''',
+]
