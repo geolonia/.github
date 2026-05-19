@@ -1,0 +1,36 @@
+# Org-wide betterleaks config for Geolonia repositories.
+#
+# This file is consumed automatically by:
+#
+#   1. The reusable per-PR scan workflow
+#      (.github/workflows/reusable-secret-leak-check.yml) when the
+#      caller did not pass a `config-path` input.
+#
+#   2. The weekly org-wide audit workflow
+#      (geolonia/geolonia-operations/.github/workflows/secret-leak-audit.yml)
+#      via the same fetch-and-fallback pattern.
+#
+# Per-repo overrides:
+#
+#   - Commit a `.betterleaks.toml` at the root of your repository to
+#     extend or replace this config. The reusable workflow auto-detects
+#     it (or you can pass an explicit `config-path` input).
+#
+# Why `generic-api-key` is disabled:
+#
+#   In our org baseline (May 2026, 708 repos), `generic-api-key`
+#   produced 1,838 of 2,381 findings, with a sample noise rate of
+#   ~95%. Most hits are public-by-design values: Geolonia map tile
+#   API keys embedded in HTML widgets, Stripe publishable keys
+#   (`pk_test_`, `pk_live_`), Amplify GraphQL keys (`da2-`), JWT
+#   examples in docs, content hashes, build artifacts. Targeted rules
+#   (`stripe-access-token`, `aws-access-token`, `anthropic-api-key`,
+#   `slack-bot-token`, `jwt`, `private-key`, etc.) catch the same
+#   threat class via specific token shapes and stay enabled. Disabling
+#   `generic-api-key` org-wide cuts the noise without losing real
+#   coverage. A repo that wants the rule on can re-enable it in its
+#   own `.betterleaks.toml`.
+
+[extend]
+useDefault = true
+disabledRules = ["generic-api-key"]
