@@ -91,3 +91,24 @@ regexes = [
   # tests. Real Basic-auth credentials are never the words themselves.
   '''(?i)\bclient[-_]id:client[-_]secret\b''',
 ]
+
+[[allowlists]]
+description = "Minified bundles, source maps, and webpack bundle-stats output"
+paths = [
+  # Content hashes inside generated build output get flagged as
+  # high-entropy tokens (sourcegraph-access-token in particular fires
+  # on 40-char hex SHA1s, which is exactly what webpack emits as
+  # content-addressing identifiers). We never hand-edit these files,
+  # so anything they contain is by definition not a hand-typed
+  # credential.
+  #
+  # Confirmed false positives by repo in the May 2026 baseline:
+  #   - editor: 21 hits in bundle-stats.json
+  #   - scratch-spacialid: 5 hits in lib.min.js + lib.min.js.map
+  #   - x-geo-scratch: 19 hits in lib.min.js + lib.min.js.map
+  '''\.min\.js$''',
+  '''\.min\.js\.map$''',
+  '''\.min\.css$''',
+  '''\.min\.css\.map$''',
+  '''(?:^|/)bundle-stats\.json$''',
+]
