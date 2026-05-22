@@ -22,7 +22,7 @@ repos:
   - repo: https://github.com/betterleaks/betterleaks
     # Pin to the same version as the per-PR Secret Leak Check workflow.
     # Bump both together so local and CI use identical rule shapes.
-    rev: v1.2.0
+    rev: v1.3.0
     hooks:
       # Docker variant. Works without a local Go/Rust toolchain. The image
       # is pulled on first use and cached. Mac/Linux developers typically
