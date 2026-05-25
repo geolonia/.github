@@ -1,0 +1,22 @@
+name: Bumblebee Scan
+
+on:
+  pull_request:
+    branches: [$default-branch]
+  push:
+    branches: [$default-branch]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@v1
+    # Default: project profile, all ecosystems, fail PR on any match.
+    # Common overrides:
+    # with:
+    #   ecosystems: "npm,mcp"            # scope to specific ecosystems
+    #   fail-on-findings: false          # warn-only while triaging
+    #   bumblebee-version: "v0.1.1"      # pin a different release
+    #   profile: "baseline"              # baseline | project | deep
