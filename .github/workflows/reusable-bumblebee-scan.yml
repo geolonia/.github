@@ -70,7 +70,7 @@ jobs:
             -R perplexityai/bumblebee \
             -p "${ASSET}" \
             -p "checksums.txt"
-          shasum -a 256 -c <(grep "${ASSET}" checksums.txt)
+          shasum -a 256 -c <(grep -F "${ASSET}" checksums.txt)
           tar -xzf "${ASSET}"
           ./bumblebee version
 
