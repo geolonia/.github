@@ -3,8 +3,14 @@ name: Bumblebee Scan
 on:
   pull_request:
     branches: [$default-branch]
-  push:
-    branches: [$default-branch]
+  schedule:
+    # 19:00 UTC = 04:00 JST. Catches packages that become IOCs after
+    # merge — the exposure catalog updates independently of your code.
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+  # Uncomment for repos that publish artifacts (npm / PyPI / Docker):
+  # release:
+  #   types: [published]
 
 permissions:
   contents: read
