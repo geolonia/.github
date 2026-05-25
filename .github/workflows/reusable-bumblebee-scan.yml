@@ -46,6 +46,7 @@ on:
 permissions:
   contents: read        # checkout the repository
   pull-requests: write  # post/update PR comment with scan results
+  issues: write         # open/update a tracking issue on non-PR triggers (schedule, release, workflow_dispatch)
 
 jobs:
   scan:
@@ -203,6 +204,56 @@ jobs:
             else
               echo "::warning::Could not post PR comment (read-only token in fork PR / Dependabot context)."
             fi
+          fi
+
+      - name: Open / update tracking issue (non-PR triggers)
+        # On schedule / workflow_dispatch / release / push, there's no
+        # PR to comment on. Open one tracking issue per repo (label
+        # `bumblebee-finding`), updating it idempotently via a marker
+        # so re-runs don't spam.
+        if: always() && github.event.pull_request.number == null && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY_FILE: ${{ steps.comment.outputs.body_file }}
+          TOTAL: ${{ steps.findings.outputs.total }}
+          BUMBLEBEE_VERSION: ${{ inputs.bumblebee-version }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          MARKER="<!-- bumblebee-finding-issue-v1 -->"
+          TITLE="Bumblebee: ${TOTAL} supply-chain finding(s) detected"
+
+          gh label create bumblebee-finding --color "b60205" \
+            --description "Bumblebee supply-chain scan match — investigate as incident response" \
+            --repo "${{ github.repository }}" 2>/dev/null || true
+          gh label create security --color "ee0701" \
+            --description "Security-related issue" \
+            --repo "${{ github.repository }}" 2>/dev/null || true
+
+          EXISTING=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label bumblebee-finding \
+            --state open \
+            --json number,body \
+            --jq "[.[] | select(.body | startswith(\"${MARKER}\"))] | .[0].number // empty")
+
+          if [ -n "${EXISTING}" ]; then
+            gh issue edit "${EXISTING}" \
+              --repo "${{ github.repository }}" \
+              --title "${TITLE}" \
+              --body-file "${BODY_FILE}"
+            gh issue comment "${EXISTING}" \
+              --repo "${{ github.repository }}" \
+              --body "Re-detected in [${EVENT_NAME} run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) — ${TOTAL} finding(s)."
+            echo "Updated existing tracking issue #${EXISTING}."
+          else
+            gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "${TITLE}" \
+              --label bumblebee-finding \
+              --label security \
+              --body-file "${BODY_FILE}"
+            echo "Opened new tracking issue."
           fi
 
       - name: Upload findings as artifact
