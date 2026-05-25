@@ -1,0 +1,248 @@
+name: "[REUSABLE] Bumblebee Supply-Chain Scan"
+
+# Per-PR (and push-to-main) supply-chain inventory scan. Bumblebee
+# (Apache-2.0, by Perplexity) inventories installed packages across
+# npm/pypi/go/rubygems/composer/mcp/editor-extension/browser-extension
+# and matches them against curated exposure catalogs (`threat_intel/`)
+# shipped in the same upstream release.
+#
+# Complements:
+#   - betterleaks (PR diff secret scan) — different surface (commits)
+#   - Dependabot (CVEs in declared deps) — different signal (CVEs vs IOCs)
+#   - CodeRabbit (PR diff review) — different scope (source vs deps)
+#
+# Initial trial scoped to geolonia-backstage; see geolonia-operations#109
+# for the rollout plan.
+#
+# Consumer wrapper (in any repo):
+#
+#   name: Bumblebee Scan
+#   on:
+#     pull_request:
+#       branches: [main]
+#     push:
+#       branches: [main]
+#   permissions:
+#     contents: read
+#     pull-requests: write
+#   jobs:
+#     scan:
+#       uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@v1
+
+on:
+  workflow_call:
+    inputs:
+      bumblebee-version:
+        description: "Bumblebee release tag (also the source for `threat_intel/`). Default tracks the version evaluated in geolonia-operations#109."
+        type: string
+        required: false
+        default: "v0.1.1"
+      fail-on-findings:
+        description: "Fail the job (block the PR check) when exposures are matched. Set false for warn-only mode while triaging."
+        type: boolean
+        required: false
+        default: true
+      ecosystems:
+        description: "Comma-separated ecosystems to scan (npm,pypi,go,rubygems,packagist,mcp,editor-extension,browser-extension). Empty = all."
+        type: string
+        required: false
+        default: ""
+      profile:
+        description: "Scan profile: baseline, project, or deep. `project` is the right default for CI on a repo checkout."
+        type: string
+        required: false
+        default: "project"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    name: bumblebee (project scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download bumblebee binary + threat_intel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMBLEBEE_VERSION: ${{ inputs.bumblebee-version }}
+        run: |
+          # Pin to a specific release. The tarball ships both the
+          # `bumblebee` binary and the `threat_intel/` catalog, so a
+          # single download covers both. We verify against the
+          # published checksums.txt before extracting.
+          mkdir -p .bumblebee && cd .bumblebee
+          ASSET="bumblebee_${BUMBLEBEE_VERSION#v}_linux_amd64.tar.gz"
+          gh release download "${BUMBLEBEE_VERSION}" \
+            -R perplexityai/bumblebee \
+            -p "${ASSET}" \
+            -p "checksums.txt"
+          shasum -a 256 -c <(grep "linux_amd64" checksums.txt)
+          tar -xzf "${ASSET}"
+          ./bumblebee version
+
+      - name: Run bumblebee scan
+        id: scan
+        continue-on-error: true
+        env:
+          ECOSYSTEMS: ${{ inputs.ecosystems }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          args=(
+            scan
+            --profile "${PROFILE}"
+            --root "${GITHUB_WORKSPACE}"
+            --exposure-catalog .bumblebee/threat_intel
+            --findings-only
+            --output file
+            --output-file bumblebee-findings.ndjson
+            --max-duration 10m
+          )
+          if [ -n "${ECOSYSTEMS}" ]; then
+            args+=(--ecosystem "${ECOSYSTEMS}")
+          fi
+          ./.bumblebee/bumblebee "${args[@]}"
+
+      - name: Count findings
+        id: findings
+        if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          if [ ! -f bumblebee-findings.ndjson ]; then
+            echo "::error::bumblebee did not produce an output file (outcome=${SCAN_OUTCOME})"
+            echo "scan_failed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          # NDJSON: one JSON record per line. Each finding is
+          # record_type=finding. With --findings-only, the file
+          # contains only findings + a trailing scan_summary.
+          TOTAL=$(grep -c '"record_type":"finding"' bumblebee-findings.ndjson || true)
+          echo "total=${TOTAL:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Emit inline annotations
+        if: always() && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0'
+        run: |
+          # One ::error:: workflow command per finding. Sanitize every
+          # interpolated field (newlines, `::`) to prevent
+          # workflow-command injection from a maliciously named
+          # package or catalog entry.
+          grep '"record_type":"finding"' bumblebee-findings.ndjson | jq -r '
+            def safe: tostring | gsub("[\r\n]"; " ") | gsub("::"; "[colon-colon]");
+            "::error file=" + ((.source_file // "(unknown)") | safe) +
+            "::Bumblebee finding: " + ((.ecosystem // "?") | safe) +
+            " package " + ((.package_name // "?") | safe) +
+            "@" + ((.version // "?") | safe) +
+            " matches catalog " + ((.catalog_id // "?") | safe) +
+            " (severity " + ((.severity // "unspecified") | safe) +
+            ", confidence " + ((.confidence // "?") | safe) + ")"
+          '
+
+      - name: Build PR comment body
+        id: comment
+        if: always()
+        env:
+          SCAN_FAILED: ${{ steps.findings.outputs.scan_failed }}
+          TOTAL: ${{ steps.findings.outputs.total }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+          BUMBLEBEE_VERSION: ${{ inputs.bumblebee-version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          BODY_FILE="pr-comment.md"
+          MARKER="<!-- bumblebee-reusable-v1 -->"
+          {
+            echo "${MARKER}"
+            echo ""
+            echo "### Bumblebee Supply-Chain Scan (\`${BUMBLEBEE_VERSION}\`)"
+            echo ""
+            if [ "${SCAN_FAILED}" = "true" ]; then
+              echo "X Bumblebee scan failed before producing a readable report. [Workflow run](${RUN_URL})"
+            elif [ "${TOTAL:-0}" = "0" ]; then
+              echo "OK No exposure-catalog matches in this checkout."
+            else
+              DETAILS=$(grep '"record_type":"finding"' bumblebee-findings.ndjson | jq -r '
+                "- **" + (.severity // "unspecified") + "** `" +
+                (.ecosystem // "?") + ":" + (.package_name // "?") + "@" + (.version // "?") +
+                "` matches `" + (.catalog_id // "?") + "`" +
+                (if .source_file then " at `" + .source_file + "`" else "" end) +
+                " — " + (.evidence // "exact match")
+              ')
+              MAX=60000
+              if [ "${#DETAILS}" -gt "${MAX}" ]; then
+                DETAILS="${DETAILS:0:${MAX}}"$'\n\n_(Truncated; full NDJSON in the workflow artifact.)_'
+              fi
+              echo "Found **${TOTAL} exposure match(es)** against upstream \`threat_intel/\`."
+              echo ""
+              echo "${DETAILS}"
+              echo ""
+              echo "Full NDJSON report attached to the [workflow run](${RUN_URL}) as an artifact."
+              if [ "${FAIL_ON_FINDINGS}" = "true" ]; then
+                echo ""
+                echo "**This check is failing the PR.** A matched package is a known supply-chain compromise — treat as incident response, not a routine dependency issue."
+              else
+                echo ""
+                echo "_This check is in warn-only mode (\`fail-on-findings: false\`)._"
+              fi
+            fi
+          } > "${BODY_FILE}"
+          echo "body_file=${BODY_FILE}" >> "$GITHUB_OUTPUT"
+          echo "marker=${MARKER}" >> "$GITHUB_OUTPUT"
+
+      - name: Post / update PR comment
+        # PRs from forks (and Dependabot PRs) get a read-only
+        # GITHUB_TOKEN regardless of the `permissions:` block. This
+        # step degrades gracefully in that case — annotations + the
+        # artifact still carry the report.
+        if: always() && github.event.pull_request.number != null
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY_FILE: ${{ steps.comment.outputs.body_file }}
+          MARKER: ${{ steps.comment.outputs.marker }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --paginate --slurp \
+            --jq "[.[].[] | select(.body | startswith(env.MARKER))] | .[0].id // empty" \
+            2>/dev/null || true)
+          if [ -n "${EXISTING}" ]; then
+            if gh api -X PATCH "repos/${{ github.repository }}/issues/comments/${EXISTING}" \
+                 -f body="$(cat "${BODY_FILE}")" >/dev/null 2>&1; then
+              echo "Updated existing bumblebee comment (#${EXISTING})."
+            else
+              echo "::warning::Could not update PR comment (read-only token in fork PR / Dependabot context)."
+            fi
+          else
+            if gh pr comment "${PR_NUMBER}" --body-file "${BODY_FILE}" >/dev/null 2>&1; then
+              echo "Posted new bumblebee comment."
+            else
+              echo "::warning::Could not post PR comment (read-only token in fork PR / Dependabot context)."
+            fi
+          fi
+
+      - name: Upload findings as artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: bumblebee-findings-${{ github.event.pull_request.number || github.run_id }}
+          path: bumblebee-findings.ndjson
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail the job if findings + fail-on-findings
+        if: always() && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0' && inputs.fail-on-findings == true
+        run: |
+          echo "::error::Bumblebee scan failed: ${{ steps.findings.outputs.total }} exposure match(es) found."
+          exit 1
+
+      - name: Surface scan-level failure
+        if: always() && steps.findings.outputs.scan_failed == 'true'
+        run: |
+          echo "::error::Bumblebee scan failed before producing a readable report."
+          exit 1
