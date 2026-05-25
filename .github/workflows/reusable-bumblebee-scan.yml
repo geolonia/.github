@@ -223,6 +223,15 @@ jobs:
           MARKER="<!-- bumblebee-finding-issue-v1 -->"
           TITLE="Bumblebee: ${TOTAL} supply-chain finding(s) detected"
 
+          # Reuse the PR-comment body but swap its marker for the
+          # issue-specific one, so the idempotent lookup below
+          # actually finds issues we created earlier.
+          ISSUE_BODY_FILE="issue-body.md"
+          {
+            echo "${MARKER}"
+            tail -n +2 "${BODY_FILE}"
+          } > "${ISSUE_BODY_FILE}"
+
           gh label create bumblebee-finding --color "b60205" \
             --description "Bumblebee supply-chain scan match — investigate as incident response" \
             --repo "${{ github.repository }}" 2>/dev/null || true
@@ -241,7 +250,7 @@ jobs:
             gh issue edit "${EXISTING}" \
               --repo "${{ github.repository }}" \
               --title "${TITLE}" \
-              --body-file "${BODY_FILE}"
+              --body-file "${ISSUE_BODY_FILE}"
             gh issue comment "${EXISTING}" \
               --repo "${{ github.repository }}" \
               --body "Re-detected in [${EVENT_NAME} run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) — ${TOTAL} finding(s)."
@@ -252,7 +261,7 @@ jobs:
               --title "${TITLE}" \
               --label bumblebee-finding \
               --label security \
-              --body-file "${BODY_FILE}"
+              --body-file "${ISSUE_BODY_FILE}"
             echo "Opened new tracking issue."
           fi
 
