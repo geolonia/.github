@@ -1,27 +1,17 @@
 name: "[REUSABLE] Bumblebee Supply-Chain Scan"
 
-# Per-PR (and push-to-main) supply-chain inventory scan. Bumblebee
-# (Apache-2.0, by Perplexity) inventories installed packages across
+# Per-PR (and push-to-main) supply-chain inventory scan using
+# Bumblebee (Apache-2.0). Matches installed packages across
 # npm/pypi/go/rubygems/composer/mcp/editor-extension/browser-extension
-# and matches them against curated exposure catalogs (`threat_intel/`)
-# shipped in the same upstream release.
+# against curated `threat_intel/` exposure catalogs shipped in the
+# same upstream release.
 #
-# Complements:
-#   - betterleaks (PR diff secret scan) — different surface (commits)
-#   - Dependabot (CVEs in declared deps) — different signal (CVEs vs IOCs)
-#   - CodeRabbit (PR diff review) — different scope (source vs deps)
-#
-# Initial trial scoped to geolonia-backstage; see geolonia-operations#109
-# for the rollout plan.
-#
-# Consumer wrapper (in any repo):
+# Consumer wrapper:
 #
 #   name: Bumblebee Scan
 #   on:
-#     pull_request:
-#       branches: [main]
-#     push:
-#       branches: [main]
+#     pull_request: { branches: [main] }
+#     push: { branches: [main] }
 #   permissions:
 #     contents: read
 #     pull-requests: write
@@ -33,12 +23,12 @@ on:
   workflow_call:
     inputs:
       bumblebee-version:
-        description: "Bumblebee release tag (also the source for `threat_intel/`). Default tracks the version evaluated in geolonia-operations#109."
+        description: "Bumblebee release tag (also the source for `threat_intel/`)."
         type: string
         required: false
         default: "v0.1.1"
       fail-on-findings:
-        description: "Fail the job (block the PR check) when exposures are matched. Set false for warn-only mode while triaging."
+        description: "Fail the job when exposures are matched. Set false for warn-only mode."
         type: boolean
         required: false
         default: true
@@ -48,18 +38,18 @@ on:
         required: false
         default: ""
       profile:
-        description: "Scan profile: baseline, project, or deep. `project` is the right default for CI on a repo checkout."
+        description: "Scan profile: baseline, project, or deep."
         type: string
         required: false
         default: "project"
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: read        # checkout the repository
+  pull-requests: write  # post/update PR comment with scan results
 
 jobs:
   scan:
-    name: bumblebee (project scan)
+    name: bumblebee (${{ inputs.profile }} scan)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -73,17 +63,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUMBLEBEE_VERSION: ${{ inputs.bumblebee-version }}
         run: |
-          # Pin to a specific release. The tarball ships both the
-          # `bumblebee` binary and the `threat_intel/` catalog, so a
-          # single download covers both. We verify against the
-          # published checksums.txt before extracting.
           mkdir -p .bumblebee && cd .bumblebee
           ASSET="bumblebee_${BUMBLEBEE_VERSION#v}_linux_amd64.tar.gz"
           gh release download "${BUMBLEBEE_VERSION}" \
             -R perplexityai/bumblebee \
             -p "${ASSET}" \
             -p "checksums.txt"
-          shasum -a 256 -c <(grep "linux_amd64" checksums.txt)
+          shasum -a 256 -c <(grep "${ASSET}" checksums.txt)
           tar -xzf "${ASSET}"
           ./bumblebee version
 
@@ -120,19 +106,14 @@ jobs:
             echo "scan_failed=true" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          # NDJSON: one JSON record per line. Each finding is
-          # record_type=finding. With --findings-only, the file
-          # contains only findings + a trailing scan_summary.
           TOTAL=$(grep -c '"record_type":"finding"' bumblebee-findings.ndjson || true)
           echo "total=${TOTAL:-0}" >> "$GITHUB_OUTPUT"
 
       - name: Emit inline annotations
         if: always() && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0'
         run: |
-          # One ::error:: workflow command per finding. Sanitize every
-          # interpolated field (newlines, `::`) to prevent
-          # workflow-command injection from a maliciously named
-          # package or catalog entry.
+          # Sanitize interpolated fields (newlines, `::`) to prevent
+          # workflow-command injection from a maliciously named package.
           grep '"record_type":"finding"' bumblebee-findings.ndjson | jq -r '
             def safe: tostring | gsub("[\r\n]"; " ") | gsub("::"; "[colon-colon]");
             "::error file=" + ((.source_file // "(unknown)") | safe) +
@@ -184,7 +165,7 @@ jobs:
               echo "Full NDJSON report attached to the [workflow run](${RUN_URL}) as an artifact."
               if [ "${FAIL_ON_FINDINGS}" = "true" ]; then
                 echo ""
-                echo "**This check is failing the PR.** A matched package is a known supply-chain compromise — treat as incident response, not a routine dependency issue."
+                echo "**This check is failing the PR.** A matched package is a known supply-chain compromise — treat as incident response."
               else
                 echo ""
                 echo "_This check is in warn-only mode (\`fail-on-findings: false\`)._"
@@ -195,10 +176,8 @@ jobs:
           echo "marker=${MARKER}" >> "$GITHUB_OUTPUT"
 
       - name: Post / update PR comment
-        # PRs from forks (and Dependabot PRs) get a read-only
-        # GITHUB_TOKEN regardless of the `permissions:` block. This
-        # step degrades gracefully in that case — annotations + the
-        # artifact still carry the report.
+        # GITHUB_TOKEN is read-only on fork PRs / Dependabot PRs. Degrade
+        # gracefully — annotations + artifact still carry the report.
         if: always() && github.event.pull_request.number != null
         continue-on-error: true
         env:
