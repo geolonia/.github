@@ -112,10 +112,12 @@ configurations and editor / browser extensions in the repo checkout.
 
 - **`pull_request`**: PR comment (idempotent via marker), inline
   annotations on the matched source files, NDJSON artifact, failed check.
-- **`schedule` / `workflow_dispatch` / `release` / `push`**: opens or
-  updates a tracking issue in the same repo with the `bumblebee-finding`
-  and `security` labels. The issue body links back to the workflow run;
-  re-detections add a comment so the issue bumps on notifications.
+- **Any non-PR trigger** (the default template enables `schedule` and
+  `workflow_dispatch`; callers may also add `release` or `push`): opens
+  or updates a tracking issue in the same repo with the
+  `bumblebee-finding` and `security` labels. The issue body links back to
+  the workflow run; re-detections add a comment so the issue bumps on
+  notifications.
 - Falls back gracefully on fork PRs and Dependabot PRs where
   `GITHUB_TOKEN` is read-only. Inline annotations and the artifact still
   carry the report.
