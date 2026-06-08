@@ -2,7 +2,8 @@
 #
 # Drop this file at the root of your repository as `.pinact.yml`. pinact
 # reads it both locally (pre-commit, manual `pinact run`) and in CI (the
-# Action Pinning Check), so local and CI behave identically.
+# Action Pinning Check), so local and CI behave identically. Requires
+# pinact v4+ (the `version` field below).
 #
 # What it does:
 #
@@ -17,10 +18,27 @@
 #                       run, not only when `--verify-min-age` is passed.
 #                       Keeps the rule on by default for local runs.
 #
+#   rules (geolonia/*)  Exempt our own org from the cooldown. The 7-day
+#                       window guards against a hijacked THIRD-PARTY
+#                       release; we author and control geolonia/* releases
+#                       ourselves, and a brand-new geolonia/.github
+#                       reusable would otherwise be un-adoptable for a
+#                       week (no older release contains it). Still
+#                       SHA-pinned; Dependabot maintains them.
+#
 # Bump an action by letting Dependabot (github-actions, weekly, with a
 # matching 7-day cooldown) open the PR, or run `pinact run --update`
 # locally. Do not hand-edit the SHA or the version comment; pinact keeps
 # the two in sync.
+version: 3
+# Two spaces before the version comment, matching the org's existing pin
+# style (pinact's default is a single space).
+separator: "  # "
 min_age:
   value: 7
   always: true
+rules:
+  - min_age: 0
+    conditions:
+      - expr: |
+          ActionName matches "geolonia/.*"
