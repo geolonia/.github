@@ -26,8 +26,9 @@
 #                       week (no older release contains it). Still
 #                       SHA-pinned; Dependabot maintains them.
 #
-# Bump an action by letting Dependabot (github-actions, weekly, with a
-# matching 7-day cooldown) open the PR, or run `pinact run --update`
+# Bump an action by letting Dependabot (github-actions, weekly, with an
+# 8-day cooldown: one day over this min_age, so its PRs always clear the
+# pinact gate) open the PR, or run `pinact run --update`
 # locally. Do not hand-edit the SHA or the version comment; pinact keeps
 # the two in sync.
 version: 3
