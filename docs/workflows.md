@@ -173,10 +173,14 @@ Two files at the repo root, both copyable from `geolonia/.github`:
    releases; the window guards against third-party tag hijacks) and is
    still SHA-pinned.
 2. **`.github/dependabot.yml`** with a `github-actions` ecosystem entry,
-   `cooldown: { default-days: 7 }` (matches the pinact min age), and a
-   `groups` block batching minor/patch bumps into one PR while majors
-   arrive individually. Dependabot bumps the SHA and the version comment
-   together, so pins never go stale.
+   `cooldown: { default-days: 8 }`, and a `groups` block batching
+   minor/patch bumps into one PR while majors arrive individually.
+   Dependabot bumps the SHA and the version comment together, so pins
+   never go stale. The cooldown is one day longer than the pinact
+   `min_age` of 7: Dependabot counts whole calendar days while pinact
+   enforces an exact 168h floor, so an 8-day cooldown guarantees a
+   Dependabot PR always clears the Action Pinning Check on arrival
+   instead of failing it for a few hours at the day boundary.
 
 ### Check inputs
 
