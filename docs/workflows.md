@@ -160,7 +160,7 @@ jobs:
     uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
 ```
 
-### Prerequisites
+### Required files
 
 Two files at the repo root, both copyable from `geolonia/.github`:
 
@@ -175,7 +175,7 @@ Two files at the repo root, both copyable from `geolonia/.github`:
    arrive individually. Dependabot bumps the SHA and the version comment
    together, so pins never go stale.
 
-### Inputs
+### Check inputs
 
 | Input | Default | Purpose |
 | --- | --- | --- |
@@ -189,9 +189,9 @@ out from a red CI check. Copy `pinact/.pre-commit-config.example.yaml`
 from `geolonia/.github` to `.pre-commit-config.yaml`, install pinact
 (`brew install pinact`), then `pre-commit install`.
 
-### Adding it to a repo
+### Enabling the check
 
-1. Copy `.pinact.yml` and the Dependabot config (see Prerequisites).
+1. Copy `.pinact.yml` and the Dependabot config (see "Required files" above).
 2. Open the repo on GitHub and go to **Actions -> New workflow**. Under
    **By Geolonia**, pick **Action Pinning Check** and **Configure**.
 3. Run `pinact run` once locally (or let the pre-commit hook do it) to

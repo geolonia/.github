@@ -2,7 +2,7 @@ name: Action Pinning Check
 
 on:
   pull_request:
-    branches: [main]
+    branches: [$default-branch]
 
 permissions:
   contents: read

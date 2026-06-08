@@ -30,6 +30,8 @@ repos:
         name: pinact (pin GitHub Actions)
         entry: pinact run
         language: system
-        # Only run when a workflow or action definition changes.
-        files: ^(\.github/workflows/.*\.ya?ml|action\.ya?ml)$
+        # Only run when a workflow or action definition changes. Matches
+        # workflow files plus action.yml/action.yaml at any depth (composite
+        # actions live in subdirectories).
+        files: (^\.github/workflows/.*\.ya?ml$|(^|/)action\.ya?ml$)
         pass_filenames: false
