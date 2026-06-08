@@ -1,0 +1,60 @@
+name: "[REUSABLE] Action Pinning Check"
+
+# Per-PR gate that verifies every GitHub Action and reusable workflow
+# referenced in the caller repo is:
+#
+#   1. pinned to a full 40-char commit SHA,
+#   2. annotated with a version comment that matches that SHA, and
+#   3. at least the minimum release age set in the repo's .pinact.yml
+#      (org default: 7 days).
+#
+# It runs pinact in validation-only mode (fix: false): it never edits a
+# file or pushes a commit, it only fails the check when something is off.
+# Pair it with a repo-root .pinact.yml and Dependabot (github-actions,
+# weekly, with a matching cooldown) so pins stay current without manual
+# SHA edits.
+#
+# Consumer wrapper (in any repo):
+#
+#   name: Action Pinning Check
+#   on:
+#     pull_request:
+#       branches: [main]
+#   jobs:
+#     pinact:
+#       uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "Runner label for the check job."
+        type: string
+        required: false
+        default: "ubuntu-latest"
+
+permissions:
+  contents: read
+
+jobs:
+  pinact:
+    name: pinact (verify pins)
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify action pins
+        uses: suzuki-shunsuke/pinact-action@896d595f299e71d65b9d28349d6956abe144390a  # v3.0.0
+        with:
+          # Validation only: pinact reports problems and exits non-zero,
+          # but never rewrites workflows or pushes a fix from CI.
+          fix: "false"
+          # --verify-comment: the version comment must match the pinned SHA.
+          verify: "true"
+          # --verify-min-age: enforce the .pinact.yml minimum release age
+          # against the currently pinned versions.
+          verify_min_age: "true"

@@ -129,6 +129,74 @@ picker, look under **By Geolonia** for **Bumblebee Supply-Chain Scan**
 and click **Configure**. Commit the file as suggested. No other setup
 is required.
 
+## Action Pinning Check (`reusable-pinact-check.yml`)
+
+- Runs on `pull_request` to the default branch.
+- Delegates to `reusable-pinact-check.yml@v1`, which runs
+  [pinact](https://github.com/suzuki-shunsuke/pinact) (via
+  `suzuki-shunsuke/pinact-action`) in validation-only mode (`fix: false`):
+  it never edits a file or pushes a commit, it only fails the check.
+- Fails the PR when any GitHub Action or reusable workflow is not pinned
+  to a full commit SHA, when a version comment does not match the pinned
+  SHA, or when a pinned release is younger than the minimum release age.
+
+The org standard is to pin every action to a 40-char commit SHA with a
+matching version comment, for example
+`actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2`.
+SHA pins are immutable, so a hijacked upstream tag cannot silently change
+what runs in CI. Dependabot keeps the pins current.
+
+Example minimal usage:
+
+```yaml
+name: Action Pinning Check
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  pinact:
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
+```
+
+### Prerequisites
+
+Two files at the repo root, both copyable from `geolonia/.github`:
+
+1. **`.pinact.yml`** (copy `pinact/.pinact.yml`): sets the minimum
+   release age (org default: 7 days, `min_age.value: 7`, `always: true`).
+   This is the GitHub Actions analog of pnpm's `minimumReleaseAge`: a new
+   tag is not adopted until it has survived a week, the window when a
+   hijacked-tag attack is most likely to still be live.
+2. **`.github/dependabot.yml`** with a `github-actions` ecosystem entry,
+   `cooldown: { default-days: 7 }` (matches the pinact min age), and a
+   `groups` block batching minor/patch bumps into one PR while majors
+   arrive individually. Dependabot bumps the SHA and the version comment
+   together, so pins never go stale.
+
+### Inputs
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `runs-on` | `ubuntu-latest` | Runner label for the check job. |
+
+### Local pre-commit (optional but recommended)
+
+Install the [pre-commit](https://pre-commit.com/) hook so pins are
+applied and the min-age is enforced before you push, instead of finding
+out from a red CI check. Copy `pinact/.pre-commit-config.example.yaml`
+from `geolonia/.github` to `.pre-commit-config.yaml`, install pinact
+(`brew install pinact`), then `pre-commit install`.
+
+### Adding it to a repo
+
+1. Copy `.pinact.yml` and the Dependabot config (see Prerequisites).
+2. Open the repo on GitHub and go to **Actions -> New workflow**. Under
+   **By Geolonia**, pick **Action Pinning Check** and **Configure**.
+3. Run `pinact run` once locally (or let the pre-commit hook do it) to
+   SHA-pin existing workflows, then commit.
+
 ## Updating templates
 
 - Keep the `.properties.json` metadata in sync with the YAML so the workflow

@@ -1,0 +1,35 @@
+# Example pre-commit-framework config for the Geolonia org.
+#
+# Drop this file at the root of your repository as `.pre-commit-config.yaml`
+# (merge the `repos:` list if you already have one), then run once per
+# laptop:
+#
+#   brew install pre-commit pinact   # pinact tap: suzuki-shunsuke/pinact
+#   pre-commit install
+#
+# After that, `git commit` runs pinact on the staged workflow files and
+# pins any unpinned action (and refuses the commit if a pin is younger
+# than the 7-day minimum release age in .pinact.yml). Same engine and
+# same rules as the per-PR Action Pinning Check, so feedback is
+# consistent between local and CI.
+#
+# pinact must be on PATH. Install it with Homebrew (above), aqua, or
+# `go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.0.0`.
+# Pin the same v4 line that the CI gate (pinact-action v3) bundles, so
+# local and CI use the same engine.
+#
+# Bypass for the rare commit that must go in despite the hook
+# (the CI gate still catches it on the PR):
+#
+#   git commit --no-verify
+
+repos:
+  - repo: local
+    hooks:
+      - id: pinact
+        name: pinact (pin GitHub Actions)
+        entry: pinact run
+        language: system
+        # Only run when a workflow or action definition changes.
+        files: ^(\.github/workflows/.*\.ya?ml|action\.ya?ml)$
+        pass_filenames: false
