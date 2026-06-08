@@ -168,7 +168,10 @@ Two files at the repo root, both copyable from `geolonia/.github`:
    release age (org default: 7 days, `min_age.value: 7`, `always: true`).
    This is the GitHub Actions analog of pnpm's `minimumReleaseAge`: a new
    tag is not adopted until it has survived a week, the window when a
-   hijacked-tag attack is most likely to still be live.
+   hijacked-tag attack is most likely to still be live. The canonical
+   file exempts `geolonia/*` from the cooldown (we author our own
+   releases; the window guards against third-party tag hijacks) and is
+   still SHA-pinned.
 2. **`.github/dependabot.yml`** with a `github-actions` ecosystem entry,
    `cooldown: { default-days: 7 }` (matches the pinact min age), and a
    `groups` block batching minor/patch bumps into one PR while majors
