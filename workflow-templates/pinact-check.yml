@@ -1,0 +1,17 @@
+name: Action Pinning Check
+
+on:
+  pull_request:
+    branches: [$default-branch]
+
+permissions:
+  contents: read
+
+jobs:
+  pinact:
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
+    # Verifies every GitHub Action in this repo is SHA-pinned, carries a
+    # matching version comment, and meets the 7-day minimum release age.
+    # Requires a .pinact.yml at the repo root (copy the org canonical one
+    # from geolonia/.github: pinact/.pinact.yml) and pairs with a
+    # Dependabot github-actions config to keep pins current.
