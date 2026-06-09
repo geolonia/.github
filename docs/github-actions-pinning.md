@@ -15,15 +15,15 @@ section of the Reusable workflows page.
 ## Why pin to a commit SHA
 
 A tag like `@v4` is **mutable**: whoever controls the action's repository can
-move it to point at different code at any time. If a popular action is
-compromised (not hypothetical, it happened to `tj-actions/changed-files` in
-2026), every workflow that uses the moved tag silently runs the attacker's code
-on its next run, with access to that workflow's `GITHUB_TOKEN` and secrets.
+move it to point at different code at any time, even after you have reviewed it.
+Pinning to a tag trusts that it will never be changed or hijacked.
 
 A 40-character commit SHA is **immutable**: it always resolves to the exact
-commit you reviewed, so a hijacked tag cannot change what runs in CI. The
-trailing `# v6.0.2` comment keeps the line readable. The classic downside of SHA
-pinning is staleness, which we remove with Dependabot.
+commit you reviewed. So a moved or hijacked tag cannot silently swap in
+different code on your next workflow run, where it would have access to your
+`GITHUB_TOKEN` and secrets. That is what pinning to a SHA prevents. The trailing
+`# v6.0.2` comment keeps the line readable. The classic downside of SHA pinning
+is staleness, which we remove with Dependabot.
 
 ## How the pieces fit together
 
@@ -39,7 +39,7 @@ The 7-day wait is the same idea as pnpm's `minimumReleaseAge`, which we also use
 for npm dependencies: do not adopt a release until it has survived a week, the
 window in which a malicious release is most likely to be caught and pulled. The
 Dependabot `cooldown` is set to **8** days (one more than pinact's 7) because
-Dependabot counts whole calendar days while pinact enforces an exact 168 hour
+Dependabot counts whole calendar days while pinact enforces an exact 168-hour
 floor, so the extra day guarantees Dependabot PRs pass the check on arrival.
 
 ## Adopting it in a repo
