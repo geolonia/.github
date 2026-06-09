@@ -9,8 +9,7 @@ uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
 This page explains why and how to adopt it. The reusable CI check itself is
 documented in the
-[Action Pinning Check](workflows.md#action-pinning-check-reusable-pinact-checkyml)
-section of the Reusable workflows page.
+[Action Pinning Check](workflows/pinact-check.md) page.
 
 ## Why pin to a commit SHA
 
@@ -59,8 +58,7 @@ box. For an existing repo:
      and under **By Geolonia** choose **Action Pinning Check**, then
      **Configure** and commit the suggested file.
    - **By copying the file:** see the
-     [Action Pinning Check](workflows.md#action-pinning-check-reusable-pinact-checkyml)
-     reference.
+     [Action Pinning Check](workflows/pinact-check.md) reference.
 3. Run `pinact run` once (or let the pre-commit hook do it) to pin the existing
    workflows, then commit.
 
@@ -76,7 +74,7 @@ box. For an existing repo:
 
 ## See also
 
-- [Action Pinning Check reusable workflow](workflows.md#action-pinning-check-reusable-pinact-checkyml)
+- [Action Pinning Check reusable workflow](workflows/pinact-check.md)
 - Canonical config to copy:
   [`pinact/`](https://github.com/geolonia/.github/tree/main/pinact)
   (`.pinact.yml`, `dependabot.yml`, `.pre-commit-config.example.yaml`).
