@@ -10,9 +10,9 @@ under `.github/workflows/`.
 | --- | --- |
 | Publish TechDocs (`publish-techdocs.yml`) | [Publish TechDocs](workflows/publish-techdocs.md) |
 | Release on Tag (`release-auto-on-tag.yml`) | [Release on Tag](workflows/release-on-tag.md) |
-| Bumblebee Supply-Chain Scan (`reusable-bumblebee-scan.yml`) | [Bumblebee Supply-Chain Scan](workflows/bumblebee-scan.md) |
-| Action Pinning Check (`reusable-pinact-check.yml`) | [Action Pinning Check](workflows/pinact-check.md) |
-| CDK Deploy Monitor (`reusable-cdk-deploy-monitor.yml`) | [CDK Deploy Monitor](workflows/cdk-deploy-monitor.md) |
+| Bumblebee Supply-Chain Scan (`bumblebee-scan.yml`) | [Bumblebee Supply-Chain Scan](workflows/bumblebee-scan.md) |
+| Action Pinning Check (`pinact-check.yml`) | [Action Pinning Check](workflows/pinact-check.md) |
+| CDK Deploy Monitor (`cdk-deploy-monitor.yml`) | [CDK Deploy Monitor](workflows/cdk-deploy-monitor.md) |
 
 ## Why two workflow locations?
 
