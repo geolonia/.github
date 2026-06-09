@@ -24,4 +24,5 @@ Geolonia repositories.
 
 - [Community health](community-health.md)
 - [Reusable workflows](workflows.md)
+- [Pinning GitHub Actions](github-actions-pinning.md)
 - [Organization profile](profile.md)

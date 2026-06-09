@@ -172,7 +172,8 @@ Two files at the repo root, both copyable from `geolonia/.github`:
    file exempts `geolonia/*` from the cooldown (we author our own
    releases; the window guards against third-party tag hijacks) and is
    still SHA-pinned.
-2. **`.github/dependabot.yml`** with a `github-actions` ecosystem entry,
+2. **`.github/dependabot.yml`** (copy `pinact/dependabot.yml`) with a
+   `github-actions` ecosystem entry,
    `cooldown: { default-days: 8 }`, and a `groups` block batching
    minor/patch bumps into one PR while majors arrive individually.
    Dependabot bumps the SHA and the version comment together, so pins
