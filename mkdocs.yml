@@ -3,6 +3,7 @@ nav:
   - Overview: index.md
   - Community Health: community-health.md
   - Workflows: workflows.md
+  - GitHub Actions Pinning: github-actions-pinning.md
   - Organization Profile: profile.md
 docs_dir: docs
 theme:
