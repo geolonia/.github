@@ -126,7 +126,8 @@ artifact. Setting `persist-credentials: false` is optional hygiene on v6+, not a
 requirement. It still matters on v5 and earlier.
 
 **How do I adopt the standard in a new or existing repo?**
-Copy `.pinact.yml` and `.github/dependabot.yml` from this repo, add the Action
+Copy this repo's canonical `pinact/.pinact.yml` to your repo root as
+`.pinact.yml`, copy `.github/dependabot.yml`, add the Action
 Pinning Check workflow (see the
 [Reusable workflows](workflows.md#action-pinning-check-reusable-pinact-checkyml)
 page), then run `pinact run` once to pin the existing workflows. New repos
