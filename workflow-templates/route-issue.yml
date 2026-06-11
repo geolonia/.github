@@ -19,7 +19,9 @@ jobs:
     # the org dispatch secrets (OPS_DISPATCH_CLIENT_ID /
     # OPS_DISPATCH_APP_PRIVATE_KEY) to be visible to this repo.
     #
-    # Opt in to removing the issue from its board when the Department field is
-    # cleared (default: keep it on the board):
+    # By default each issue stays on only the board for its current Department
+    # (changing/clearing the field moves it off the other department boards;
+    # master and unrelated boards are never touched). For additive routing
+    # (add only, never remove):
     # with:
-    #   remove_on_field_removed: true
+    #   exclusive_routing: false

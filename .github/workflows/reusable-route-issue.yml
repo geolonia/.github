@@ -45,13 +45,17 @@ on:
         type: string
         required: false
         default: "route-issue"
-      remove_on_field_removed:
+      exclusive_routing:
         description: >-
-          When this repo's Department field is cleared, also remove the issue
-          from its team board(s). Default: keep the issue on the board.
+          Keep each issue on only the board for its current Department: when the
+          department changes, the issue is removed from the other department
+          boards; when it is cleared, it is removed from all of them. Only
+          department boards are ever touched (never a master/all-work board or
+          an unrelated project). Default: true. Set false for additive routing
+          (add only, never remove).
         type: boolean
         required: false
-        default: false
+        default: true
     secrets:
       OPS_DISPATCH_CLIENT_ID:
         description: "Dispatch GitHub App client id (dispatches into geolonia-operations)."
@@ -88,7 +92,7 @@ jobs:
           ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ACTION: ${{ github.event.action }}
-          REMOVE_ON_FIELD_REMOVED: ${{ inputs.remove_on_field_removed }}
+          EXCLUSIVE_ROUTING: ${{ inputs.exclusive_routing }}
         shell: bash
         run: |
           set -euo pipefail
@@ -105,7 +109,7 @@ jobs:
             --arg node_id "$ISSUE_NODE_ID" \
             --arg url "$ISSUE_URL" \
             --arg action "$ACTION" \
-            --argjson remove "$REMOVE_ON_FIELD_REMOVED" \
+            --argjson exclusive "$EXCLUSIVE_ROUTING" \
             '{
               event_type: $event_type,
               client_payload: {
@@ -114,7 +118,7 @@ jobs:
                 issue_node_id: $node_id,
                 issue_url: $url,
                 action: $action,
-                remove_on_field_removed: $remove
+                exclusive_routing: $exclusive
               }
             }')
 

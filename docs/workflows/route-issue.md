@@ -33,7 +33,7 @@ jobs:
 
 | Input | Default | Effect |
 | --- | --- | --- |
-| `remove_on_field_removed` | `false` | When the issue's `Department` field is **cleared**, also remove the issue from its team board(s). Default keeps it on the board. |
+| `exclusive_routing` | `true` | Keep each issue on only the board for its **current** `Department`. Changing the department moves the issue off the other department boards; clearing it removes the issue from all of them. Set `false` for additive routing (add only, never remove). |
 
 ```yaml
 jobs:
@@ -41,13 +41,21 @@ jobs:
     uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
     secrets: inherit
     with:
-      remove_on_field_removed: true
+      exclusive_routing: false   # add only, never remove
 ```
 
-Removal only fires when the field is **cleared**. Changing `Department` from one
-option to another fires `field_added` (an update), not `field_removed`, so a
-move between boards adds to the new board without removing the old item. A
-configured master board is never removed from.
+With the default (`exclusive_routing: true`), fixing a mis-set department also
+cleans up: picking the wrong option then correcting it leaves the issue on only
+the corrected board, not both.
+
+**Only department boards are ever touched.** Removal is scoped strictly to the
+projects listed under `departments` in `geolonia-operations`' `routing.yml`. A
+configured master/all-work board and any unrelated project an issue happens to
+sit on are never removed from.
+
+One residual edge: if the department is changed to an option that has **no
+board yet** (unmapped), the issue is left where it is and a warning is logged
+(there is no destination to move it to).
 
 ## Why dispatch-to-central?
 
