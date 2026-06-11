@@ -29,6 +29,26 @@ jobs:
     secrets: inherit
 ```
 
+## Options
+
+| Input | Default | Effect |
+| --- | --- | --- |
+| `remove_on_field_removed` | `false` | When the issue's `Department` field is **cleared**, also remove the issue from its team board(s). Default keeps it on the board. |
+
+```yaml
+jobs:
+  route:
+    uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
+    secrets: inherit
+    with:
+      remove_on_field_removed: true
+```
+
+Removal only fires when the field is **cleared**. Changing `Department` from one
+option to another fires `field_added` (an update), not `field_removed`, so a
+move between boards adds to the new board without removing the old item. A
+configured master board is never removed from.
+
 ## Why dispatch-to-central?
 
 This public side is a dumb forwarder. It mints only a low-privilege dispatch

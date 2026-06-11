@@ -18,3 +18,8 @@ jobs:
     # Must live on the DEFAULT branch for the issues trigger to fire. Requires
     # the org dispatch secrets (OPS_DISPATCH_CLIENT_ID /
     # OPS_DISPATCH_APP_PRIVATE_KEY) to be visible to this repo.
+    #
+    # Opt in to removing the issue from its board when the Department field is
+    # cleared (default: keep it on the board):
+    # with:
+    #   remove_on_field_removed: true
