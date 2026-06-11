@@ -50,9 +50,9 @@ on:
           Keep each issue on only the board for its current Department: when the
           department changes, the issue is removed from the other department
           boards; when it is cleared, it is removed from all of them. Only
-          department boards are ever touched (never a master/all-work board or
-          an unrelated project). Default: true. Set false for additive routing
-          (add only, never remove).
+          department boards are ever touched; any other project an issue sits on
+          is left alone. Default: true. Set false for additive routing (add
+          only, never remove).
         type: boolean
         required: false
         default: true

@@ -21,7 +21,7 @@ jobs:
     #
     # By default each issue stays on only the board for its current Department
     # (changing/clearing the field moves it off the other department boards;
-    # master and unrelated boards are never touched). For additive routing
-    # (add only, never remove):
+    # projects that are not department boards are never touched). For additive
+    # routing (add only, never remove):
     # with:
     #   exclusive_routing: false

@@ -49,9 +49,8 @@ cleans up: picking the wrong option then correcting it leaves the issue on only
 the corrected board, not both.
 
 **Only department boards are ever touched.** Removal is scoped strictly to the
-projects listed under `departments` in `geolonia-operations`' `routing.yml`. A
-configured master/all-work board and any unrelated project an issue happens to
-sit on are never removed from.
+projects listed under `departments` in `geolonia-operations`' `routing.yml`. Any
+other project an issue happens to sit on is never removed from.
 
 One residual edge: if the department is changed to an option that has **no
 board yet** (unmapped), the issue is left where it is and a warning is logged
