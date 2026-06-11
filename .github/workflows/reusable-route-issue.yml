@@ -81,6 +81,9 @@ jobs:
           private-key: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
           repositories: ${{ inputs.operations_repo }}
           owner: ${{ github.repository_owner }}
+          # Least privilege: repository_dispatch needs only these scopes.
+          permission-metadata: read
+          permission-contents: write
 
       - name: Dispatch routing request
         env:
