@@ -1,0 +1,113 @@
+name: "[REUSABLE] Route issue to team board"
+
+# Forwarder for org-wide issue auto-routing.
+#
+# When an issue's org-level issue field changes in a participating repo, this
+# workflow mints a low-privilege dispatch token and sends a repository_dispatch
+# event to the central, PRIVATE geolonia-operations repo. That repo holds all
+# the routing logic, project IDs, and the privileged Org-Projects token and
+# decides which team board (if any) the issue belongs on.
+#
+# This public side is deliberately dumb: it never reads the field value, never
+# sees a project ID, and never holds the Org-Projects credential. It only knows
+# "an issue field changed here, node id X — operations, take it from here." That
+# keeps every secret and every routing decision private, mirroring the
+# reusable-sync-team-access.yml dispatch-to-central pattern (individual repos
+# never see the org token).
+#
+# Consumer wrapper (in any repo, on the DEFAULT branch so the trigger fires):
+#
+#   name: Route issue to team board
+#   on:
+#     issues:
+#       types: [field_added, field_removed]
+#   permissions:
+#     contents: read
+#   jobs:
+#     route:
+#       uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
+#       secrets: inherit
+#
+# Requires the org-level dispatch secrets (already used by sync-team-access) to
+# be visible to the calling repo:
+#   OPS_DISPATCH_CLIENT_ID, OPS_DISPATCH_APP_PRIVATE_KEY
+
+on:
+  workflow_call:
+    inputs:
+      operations_repo:
+        description: "Central repo (name only) that processes routing requests."
+        type: string
+        required: false
+        default: "geolonia-operations"
+      event_type:
+        description: "repository_dispatch event_type the central repo listens for."
+        type: string
+        required: false
+        default: "route-issue"
+    secrets:
+      OPS_DISPATCH_CLIENT_ID:
+        description: "Dispatch GitHub App client id (dispatches into geolonia-operations)."
+        required: true
+      OPS_DISPATCH_APP_PRIVATE_KEY:
+        description: "Dispatch GitHub App private key."
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Forward issue field change to operations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Generate dispatch token
+        id: app_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+          private-key: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
+          repositories: ${{ inputs.operations_repo }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Dispatch routing request
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          TARGET: ${{ github.repository_owner }}/${{ inputs.operations_repo }}
+          EVENT_TYPE: ${{ inputs.event_type }}
+          SOURCE_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ACTION: ${{ github.event.action }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ISSUE_NODE_ID:-}" ]; then
+            echo "::error::No issue node id in event payload; nothing to dispatch."
+            exit 1
+          fi
+
+          REQUEST_BODY=$(jq -n \
+            --arg event_type "$EVENT_TYPE" \
+            --arg repo "$SOURCE_REPO" \
+            --arg number "$ISSUE_NUMBER" \
+            --arg node_id "$ISSUE_NODE_ID" \
+            --arg url "$ISSUE_URL" \
+            --arg action "$ACTION" \
+            '{
+              event_type: $event_type,
+              client_payload: {
+                source_repo: $repo,
+                issue_number: $number,
+                issue_node_id: $node_id,
+                issue_url: $url,
+                action: $action
+              }
+            }')
+
+          echo "$REQUEST_BODY" | gh api "repos/${TARGET}/dispatches" --input -
+
+          echo "::notice::Dispatched ${ACTION} for ${SOURCE_REPO}#${ISSUE_NUMBER} to ${TARGET}"

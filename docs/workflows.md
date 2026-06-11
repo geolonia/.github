@@ -13,6 +13,7 @@ under `.github/workflows/`.
 | Bumblebee Supply-Chain Scan (`bumblebee-scan.yml`) | [Bumblebee Supply-Chain Scan](workflows/bumblebee-scan.md) |
 | Action Pinning Check (`pinact-check.yml`) | [Action Pinning Check](workflows/pinact-check.md) |
 | CDK Deploy Monitor (`cdk-deploy-monitor.yml`) | [CDK Deploy Monitor](workflows/cdk-deploy-monitor.md) |
+| Route issue to team board (`route-issue.yml`) | [Route issue to team board](workflows/route-issue.md) |
 
 ## Why two workflow locations?
 
