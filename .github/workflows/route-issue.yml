@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   route:
-    uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
+    uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
     secrets: inherit
     # When this repo's issues get an org Department field value, they are added
     # to the matching team project board. Routing config and credentials stay
