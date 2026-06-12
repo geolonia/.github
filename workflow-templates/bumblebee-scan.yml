@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   scan:
-    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@v1
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
     # Default: project profile, all ecosystems, fail PR on any match.
     # Common overrides:
     # with:
