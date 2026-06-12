@@ -11,17 +11,11 @@ jobs:
   route:
     uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
     secrets: inherit
-    # When this repo's issues get an org Department field value, they are added
-    # to the matching team project board. Routing config and credentials stay
-    # private in geolonia-operations; this repo only forwards the event.
+    # When you set an issue's org Department field, the issue is added to that
+    # team's project board. Keep this workflow on the default branch so the
+    # issues trigger fires.
     #
-    # Must live on the DEFAULT branch for the issues trigger to fire. Requires
-    # the org dispatch secrets (OPS_DISPATCH_CLIENT_ID /
-    # OPS_DISPATCH_APP_PRIVATE_KEY) to be visible to this repo.
-    #
-    # By default each issue stays on only the board for its current Department
-    # (changing/clearing the field moves it off the other department boards;
-    # projects that are not department boards are never touched). For additive
-    # routing (add only, never remove):
+    # By default each issue stays on only its current department's board.
+    # Set exclusive_routing: false to only ever add (never remove):
     # with:
     #   exclusive_routing: false
