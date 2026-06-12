@@ -42,9 +42,8 @@ jobs:
 
 - The workflow must live on the repo's **default branch**, or the `issues`
   trigger won't fire.
-- The repo needs access to the shared org dispatch secrets (already used by
-  [Sync Team Access](../workflows.md)). Repos created from the standard
-  scaffolder get this automatically.
+- The repo needs access to the org's shared dispatch secrets (org-level Actions
+  secrets). Repos created from the standard scaffolder get this automatically.
 
 ## Troubleshooting
 
