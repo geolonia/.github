@@ -35,6 +35,21 @@
 # locally. Do not hand-edit the SHA or the version comment; pinact keeps
 # the two in sync.
 version: 3
+# Besides this repo's own workflows, also verify the GitHub Actions pinned in the
+# org workflow templates served by the "New workflow" picker (workflow-templates/).
+# The picker copies these files verbatim, so they must already be SHA-pinned for
+# an adopting repo's Action Pinning Check to pass on first commit. Dependabot's
+# github-actions ecosystem only scans .github/workflows, so it cannot reach these
+# template files; this check covers them here, catching any unpinned or
+# comment-mismatched ref at PR time. Setting `files` replaces pinact's default
+# list, so the default workflow and composite-action patterns are repeated first.
+files:
+  - pattern: .github/workflows/*.yml
+  - pattern: .github/workflows/*.yaml
+  - pattern: .github/actions/*/action.yml
+  - pattern: .github/actions/*/action.yaml
+  - pattern: workflow-templates/*.yml
+  - pattern: workflow-templates/*.yaml
 min_age:
   value: 7
   always: true
