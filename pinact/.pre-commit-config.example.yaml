@@ -14,7 +14,7 @@
 # consistent between local and CI.
 #
 # pinact must be on PATH. Install it with Homebrew (above), aqua, or
-# `go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.0.0`.
+# `go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0`.
 # Pin the same v4 line that the CI gate (pinact-action v3) bundles, so
 # local and CI use the same engine.
 #
