@@ -26,7 +26,7 @@ on:
         description: "Bumblebee release tag (also the source for `threat_intel/`)."
         type: string
         required: false
-        default: "v0.1.1"
+        default: "v0.1.2"
       fail-on-findings:
         description: "Fail the job when exposures are matched. Set false for warn-only mode."
         type: boolean

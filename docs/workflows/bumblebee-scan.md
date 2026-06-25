@@ -39,7 +39,7 @@ configurations and editor / browser extensions in the repo checkout.
 
 | Input | Default | Purpose |
 | --- | --- | --- |
-| `bumblebee-version` | `v0.1.1` | Upstream release tag. Also the source for the `threat_intel/` catalog. |
+| `bumblebee-version` | `v0.1.2` | Upstream release tag. Also the source for the `threat_intel/` catalog. |
 | `fail-on-findings` | `true` | Set to `false` for warn-only mode while triaging. |
 | `ecosystems` | (all) | Comma-separated list to scope the scan, for example `npm,mcp`. |
 | `profile` | `project` | One of `baseline`, `project`, or `deep`. |

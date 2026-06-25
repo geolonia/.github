@@ -25,5 +25,5 @@ jobs:
     # with:
     #   ecosystems: "npm,mcp"            # scope to specific ecosystems
     #   fail-on-findings: false          # warn-only while triaging
-    #   bumblebee-version: "v0.1.1"      # pin a different release
+    #   bumblebee-version: "v0.1.2"      # pin a specific release
     #   profile: "baseline"              # baseline | project | deep
