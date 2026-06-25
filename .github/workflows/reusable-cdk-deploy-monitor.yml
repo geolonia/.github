@@ -41,10 +41,12 @@ on:
         description: "OIDC IAM role ARN with cloudformation:DescribeStacks, DescribeStackEvents, DescribeStackResources, CancelUpdateStack, logs:FilterLogEvents, DescribeLogGroups, ecs:ListTasks, DescribeTasks permissions (see CdkDeployMonitor permission bundle)"
         required: true
 
+# All three are used by the monitor (it is not over-granted): a caller that
+# downscopes any of these will silently disable that capability.
 permissions:
-  id-token: write
-  contents: write
-  models: read
+  id-token: write # OIDC: assume the monitor role (CloudFormation / ECS / logs)
+  contents: write # post deploy-status commit comments
+  models: read # GitHub Models: AI analysis of deploy progress
 
 jobs:
   monitor:
