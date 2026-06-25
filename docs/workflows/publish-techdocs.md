@@ -7,6 +7,10 @@
   optional inputs allow setting a repo secret `AWS_ACCOUNT_ID` to override on a
   per-repo basis.
 
+The template is standalone by default (`push` on `docs/**` plus
+`workflow_dispatch`). Pass the AWS account secrets explicitly rather than
+`secrets: inherit`, so the reusable receives only what it needs.
+
 Example minimal usage after selecting the template:
 
 ```yaml
@@ -17,11 +21,15 @@ jobs:
     # with:
     #   environment: production
     #   aws_region: ap-northeast-1
-    secrets: inherit
-    # In case you want to override the AWS account ID:
-    # secrets: 
-    #   AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      TECHDOCS_AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
 ```
+
+To also publish docs as part of a release (called from `publish-release.yml`),
+add a `workflow_call` trigger that declares an explicit `secrets` contract
+(`AWS_ACCOUNT_ID` and `TECHDOCS_AWS_ACCOUNT_ID`, both `required: false`) and
+have the caller pass them explicitly.
 
 ## Troubleshooting
 

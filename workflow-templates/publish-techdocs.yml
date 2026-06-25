@@ -7,12 +7,27 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
   workflow_dispatch:
-  workflow_call:
+
+# Publishing on a docs/** push (above) is the standalone default.
+#
+# To ALSO publish docs as part of a release (called from publish-release.yml),
+# add a workflow_call trigger that declares an explicit secrets contract, and
+# have the caller pass the secrets explicitly (do not use `secrets: inherit`):
+#
+#   on:
+#     workflow_call:
+#       secrets:
+#         AWS_ACCOUNT_ID:
+#           required: false
+#         TECHDOCS_AWS_ACCOUNT_ID:
+#           required: false
 
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
-    secrets: inherit
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      TECHDOCS_AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
     # optional inputs can be specified here to override defaults
     # with:
     #   environment: production
