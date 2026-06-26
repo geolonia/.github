@@ -23,16 +23,19 @@ name: Security Suite
 #                 checkout, template injection, excessive permissions,
 #                 credential persistence)
 #
-# A required workflow must reference reusable workflows by full path and
-# ref (not a local ./ path), so the three reusables below are pinned to a
-# released SHA of this repo. Permissions are granted per job (least
-# privilege): the workflow default is read-only, and only the jobs that
-# post PR comments or open tracking issues get write. None of the
-# reusables declare workflow_call secrets, so no `secrets: inherit`.
+# The scanners run in report-mode: summary (they stay quiet and only expose
+# status / count outputs), and the final `report` job posts ONE consolidated
+# comment for the whole suite. So contributors see a single tidy result
+# instead of one comment per scanner.
 #
-# Rollout ramp: zizmor runs warn-only (continue-on-error) so we can observe
-# findings org-wide before blocking. Flip to enforce by removing
-# continue-on-error from the actions-audit job.
+# A required workflow must reference reusable workflows by full path and
+# ref (not a local ./ path), so the reusables below are pinned to a released
+# SHA of this repo. Permissions are granted per job (least privilege): the
+# workflow default is read-only; only the report job posts a comment.
+#
+# Rollout ramp: zizmor runs warn-only (its step is continue-on-error) so we
+# can observe findings org-wide before blocking. Flip to enforce by removing
+# continue-on-error from the Run zizmor step.
 
 on:
   pull_request:
@@ -46,15 +49,16 @@ jobs:
   supply-chain:
     permissions:
       contents: read
-      pull-requests: write # post / update the scan result comment
-      issues: write # open a tracking issue on non-PR triggers
-    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@eb33e7fd9d811e3665a354623edd76294e0bd8bc # v1.17.1
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@d46f419ad3c48566d29cf898634adb66fe16656a # feat/reusable-report-mode (pre-release; bump to the tag once #72 ships)
+    with:
+      report-mode: summary
 
   secret-leak:
     permissions:
       contents: read
-      pull-requests: write # post / update the secret-leak comment
-    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@eb33e7fd9d811e3665a354623edd76294e0bd8bc # v1.17.1
+    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@d46f419ad3c48566d29cf898634adb66fe16656a # feat/reusable-report-mode (pre-release; bump to the tag once #72 ships)
+    with:
+      report-mode: summary
 
   action-pinning:
     permissions:
@@ -64,17 +68,22 @@ jobs:
   actions-audit:
     name: zizmor (GitHub Actions audit)
     runs-on: ubuntu-latest
-    # Warn-only during rollout. Remove continue-on-error to make zizmor
-    # findings block the PR once the org is clean.
-    continue-on-error: true
     permissions:
       contents: read
+    outputs:
+      # ok when zizmor exits clean, warn otherwise (warn-only rollout).
+      status: ${{ steps.zizmor.outcome == 'success' && 'ok' || 'warn' }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - name: Run zizmor
+        id: zizmor
+        # Warn-only during rollout: the step swallows its own failure so the
+        # job (and the run) still passes, while we capture the outcome above.
+        # Remove continue-on-error to make zizmor findings block the PR.
+        continue-on-error: true
         uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
         with:
           # SARIF upload to the security tab needs GitHub Advanced Security,
@@ -89,3 +98,116 @@ jobs:
           # the action SHA, and Dependabot advances it when it bumps the
           # action. Do not request a CLI version newer than the pinned
           # action knows, or it fails with "Unknown version".
+
+  report:
+    name: Security Suite summary
+    needs: [supply-chain, secret-leak, action-pinning, actions-audit]
+    # always(): report even when a check failed. Only meaningful on PRs.
+    if: always() && github.event.pull_request.number != null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Build and post consolidated comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SUPPLY_STATUS: ${{ needs.supply-chain.outputs.status }}
+          SUPPLY_TOTAL: ${{ needs.supply-chain.outputs.total }}
+          SECRET_STATUS: ${{ needs.secret-leak.outputs.status }}
+          SECRET_TOTAL: ${{ needs.secret-leak.outputs.total }}
+          PIN_RESULT: ${{ needs.action-pinning.result }}
+          ZIZMOR_STATUS: ${{ needs.actions-audit.outputs.status }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- security-suite-v1 -->"
+
+          # Map a status token (ok|warn|fail|error) to a glyph.
+          glyph() {
+            case "$1" in
+              ok) printf '✅' ;;
+              warn) printf '⚠️' ;;
+              fail) printf '❌' ;;
+              *) printf '🟠' ;;
+            esac
+          }
+
+          # pinact exposes no outputs; derive a token from its job result.
+          case "${PIN_RESULT}" in
+            success) PIN_STATUS=ok ;;
+            failure) PIN_STATUS=fail ;;
+            *) PIN_STATUS=error ;;
+          esac
+
+          # Default empty outputs (e.g. a job that errored before setting one)
+          # to "error" so the row is never blank.
+          SUPPLY_STATUS="${SUPPLY_STATUS:-error}"
+          SECRET_STATUS="${SECRET_STATUS:-error}"
+          ZIZMOR_STATUS="${ZIZMOR_STATUS:-error}"
+
+          msg() {
+            local status="$1" ok="$2" some="$3"
+            case "${status}" in
+              ok) echo "${ok}" ;;
+              warn|fail) echo "${some}" ;;
+              *) echo "Scan error (see run)" ;;
+            esac
+          }
+
+          SUPPLY_MSG=$(msg "${SUPPLY_STATUS}" "No exposure matches" "${SUPPLY_TOTAL:-?} match(es)")
+          SECRET_MSG=$(msg "${SECRET_STATUS}" "No secrets in diff" "${SECRET_TOTAL:-?} potential secret(s)")
+          case "${PIN_STATUS}" in
+            ok) PIN_MSG="All actions pinned" ;;
+            fail) PIN_MSG="Unpinned or mismatched (see run)" ;;
+            *) PIN_MSG="Did not complete" ;;
+          esac
+          case "${ZIZMOR_STATUS}" in
+            ok) ZIZMOR_MSG="No findings" ;;
+            warn) ZIZMOR_MSG="Findings (warn-only; see annotations)" ;;
+            *) ZIZMOR_MSG="Did not complete" ;;
+          esac
+
+          # Overall callout: a real failure outranks a warning.
+          ALL="${SUPPLY_STATUS} ${SECRET_STATUS} ${PIN_STATUS} ${ZIZMOR_STATUS}"
+          if printf '%s' "${ALL}" | grep -qw "fail" || printf '%s' "${ALL}" | grep -qw "error"; then
+            CALLOUT="> [!CAUTION]"$'\n'"> A required check did not pass. See the rows above and the workflow run."
+          elif printf '%s' "${ALL}" | grep -qw "warn"; then
+            CALLOUT="> [!WARNING]"$'\n'"> Warnings only. These do not block the PR, but please review them."
+          else
+            CALLOUT="> [!NOTE]"$'\n'"> All security checks passed."
+          fi
+
+          BODY_FILE="suite-comment.md"
+          {
+            echo "${MARKER}"
+            echo ""
+            echo "## 🛡️ Security suite"
+            echo ""
+            echo "| Check | Result |"
+            echo "|:--|:--|"
+            echo "| $(glyph "${SUPPLY_STATUS}") Supply chain · \`bumblebee\` | ${SUPPLY_MSG} |"
+            echo "| $(glyph "${SECRET_STATUS}") Secrets · \`betterleaks\` | ${SECRET_MSG} |"
+            echo "| $(glyph "${PIN_STATUS}") Action pinning · \`pinact\` | ${PIN_MSG} |"
+            echo "| $(glyph "${ZIZMOR_STATUS}") Actions audit · \`zizmor\` | ${ZIZMOR_MSG} |"
+            echo ""
+            echo "${CALLOUT}"
+            echo ""
+            echo "<sub>Updated for \`${HEAD_SHA:0:7}\` · <a href=\"${RUN_URL}\">workflow run</a></sub>"
+          } > "${BODY_FILE}"
+
+          EXISTING=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --paginate --slurp \
+            --jq "[.[].[] | select(.body | startswith(\"${MARKER}\"))] | .[0].id // empty" \
+            2>/dev/null || true)
+          if [ -n "${EXISTING}" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING}" \
+              -f body="$(cat "${BODY_FILE}")" >/dev/null \
+              && echo "Updated consolidated comment (#${EXISTING})."
+          else
+            gh pr comment "${PR_NUMBER}" --body-file "${BODY_FILE}" \
+              && echo "Posted consolidated comment."
+          fi
