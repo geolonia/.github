@@ -1,0 +1,91 @@
+name: Security Suite
+
+# Single entry point for Geolonia's per-PR security checks.
+#
+# Designed to run as an organization "required workflow" (Repository
+# Rulesets, "Require workflows to pass before merging"), so every repo gets
+# the same gate with no per-repo workflow file to maintain. Point the org
+# ruleset at:
+#
+#   geolonia/.github/.github/workflows/security-suite.yml@<ref>
+#
+# (geolonia/.github is public, so the ruleset can target public, internal,
+# and private repos.) The file can also be adopted manually by copying it
+# into a repo's .github/workflows/.
+#
+# It fans out to the org reusable scanners plus an inline zizmor job:
+#
+#   * bumblebee   supply-chain package inventory vs. threat-intel catalogs
+#   * betterleaks secret-leak gate (PR diff)
+#   * pinact      GitHub Actions SHA-pinning check
+#   * zizmor      GitHub Actions static analysis (dangerous triggers such
+#                 as pull_request_target / workflow_run with untrusted
+#                 checkout, template injection, excessive permissions,
+#                 credential persistence)
+#
+# A required workflow must reference reusable workflows by full path and
+# ref (not a local ./ path), so the three reusables below are pinned to a
+# released SHA of this repo. Permissions are granted per job (least
+# privilege): the workflow default is read-only, and only the jobs that
+# post PR comments or open tracking issues get write. None of the
+# reusables declare workflow_call secrets, so no `secrets: inherit`.
+#
+# Rollout ramp: zizmor runs warn-only (continue-on-error) so we can observe
+# findings org-wide before blocking. Flip to enforce by removing
+# continue-on-error from the actions-audit job.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  supply-chain:
+    permissions:
+      contents: read
+      pull-requests: write # post / update the scan result comment
+      issues: write # open a tracking issue on non-PR triggers
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@eb33e7fd9d811e3665a354623edd76294e0bd8bc # v1.17.1
+
+  secret-leak:
+    permissions:
+      contents: read
+      pull-requests: write # post / update the secret-leak comment
+    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@eb33e7fd9d811e3665a354623edd76294e0bd8bc # v1.17.1
+
+  action-pinning:
+    permissions:
+      contents: read
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@eb33e7fd9d811e3665a354623edd76294e0bd8bc # v1.17.1
+
+  actions-audit:
+    name: zizmor (GitHub Actions audit)
+    runs-on: ubuntu-latest
+    # Warn-only during rollout. Remove continue-on-error to make zizmor
+    # findings block the PR once the org is clean.
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+        with:
+          # SARIF upload to the security tab needs GitHub Advanced Security,
+          # which is not available on private repos without a license. Use
+          # workflow annotations instead so the job behaves identically on
+          # public, internal, and private repos.
+          advanced-security: false
+          annotations: true
+          # The zizmor CLI version is left at the action default ("latest"),
+          # which the SHA-pinned action resolves to a fixed, digest-pinned
+          # image. So the version is reproducible and supply-chain pinned by
+          # the action SHA, and Dependabot advances it when it bumps the
+          # action. Do not request a CLI version newer than the pinned
+          # action knows, or it fails with "Unknown version".
