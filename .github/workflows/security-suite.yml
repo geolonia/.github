@@ -214,6 +214,6 @@ jobs:
               -f body="$(cat "${BODY_FILE}")" >/dev/null \
               && echo "Updated consolidated comment (#${EXISTING})."
           else
-            gh pr comment "${PR_NUMBER}" --body-file "${BODY_FILE}" \
+            gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file "${BODY_FILE}" \
               && echo "Posted consolidated comment."
           fi
