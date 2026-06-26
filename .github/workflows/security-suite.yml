@@ -47,8 +47,13 @@ permissions:
 
 jobs:
   supply-chain:
+    # A called reusable can only downgrade the caller's token, never
+    # elevate it, so these must grant at least what the reusable declares
+    # at its workflow level (even though summary mode does not post).
     permissions:
       contents: read
+      pull-requests: write
+      issues: write
     uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@d46f419ad3c48566d29cf898634adb66fe16656a # feat/reusable-report-mode (pre-release; bump to the tag once #72 ships)
     with:
       report-mode: summary
@@ -56,6 +61,7 @@ jobs:
   secret-leak:
     permissions:
       contents: read
+      pull-requests: write
     uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@d46f419ad3c48566d29cf898634adb66fe16656a # feat/reusable-report-mode (pre-release; bump to the tag once #72 ships)
     with:
       report-mode: summary
