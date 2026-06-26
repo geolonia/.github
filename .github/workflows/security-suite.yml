@@ -205,9 +205,11 @@ jobs:
             echo "<sub>Updated for \`${HEAD_SHA:0:7}\` · <a href=\"${RUN_URL}\">workflow run</a></sub>"
           } > "${BODY_FILE}"
 
+          # Note: gh's --slurp is incompatible with --jq, so use plain
+          # --paginate (which concatenates pages into one array) + .[].
           EXISTING=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
-            --paginate --slurp \
-            --jq "[.[].[] | select(.body | startswith(\"${MARKER}\"))] | .[0].id // empty" \
+            --paginate \
+            --jq "[.[] | select(.body | startswith(\"${MARKER}\"))] | .[0].id // empty" \
             2>/dev/null || true)
           if [ -n "${EXISTING}" ]; then
             gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING}" \
