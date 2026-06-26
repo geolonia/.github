@@ -42,6 +42,12 @@ on:
     branches:
       - main
 
+# Serialize runs per PR so two overlapping runs cannot both miss the marker
+# comment and each post a "single" consolidated comment.
+concurrency:
+  group: security-suite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -205,17 +211,31 @@ jobs:
             echo "<sub>Updated for \`${HEAD_SHA:0:7}\` · <a href=\"${RUN_URL}\">workflow run</a></sub>"
           } > "${BODY_FILE}"
 
-          # Note: gh's --slurp is incompatible with --jq, so use plain
-          # --paginate (which concatenates pages into one array) + .[].
+          # Find a prior consolidated comment by its marker. Reads work even
+          # with the read-only token on fork PRs, so this lookup is strict:
+          # an empty result means "no match" (jq's // empty), but a real
+          # API/auth failure exits non-zero and fails the job (set -e) rather
+          # than being masked into a duplicate post. Note: gh's --slurp is
+          # incompatible with --jq, so use plain --paginate + .[].
           EXISTING=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
             --paginate \
-            --jq "[.[] | select(.body | startswith(\"${MARKER}\"))] | .[0].id // empty" \
-            2>/dev/null || true)
+            --jq "[.[] | select(.body | startswith(\"${MARKER}\"))] | .[0].id // empty")
+
+          # Posting is best-effort: PRs from forks (and Dependabot) get a
+          # read-only GITHUB_TOKEN regardless of the permissions block, so the
+          # write 403s. Warn instead of failing the whole suite; zizmor
+          # findings still surface as inline annotations.
           if [ -n "${EXISTING}" ]; then
-            gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING}" \
-              -f body="$(cat "${BODY_FILE}")" >/dev/null \
-              && echo "Updated consolidated comment (#${EXISTING})."
+            if gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING}" \
+                 -f body="$(cat "${BODY_FILE}")" >/dev/null; then
+              echo "Updated consolidated comment (#${EXISTING})."
+            else
+              echo "::warning::Could not update the consolidated comment (read-only token on a fork PR?)."
+            fi
           else
-            gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file "${BODY_FILE}" \
-              && echo "Posted consolidated comment."
+            if gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file "${BODY_FILE}" >/dev/null; then
+              echo "Posted consolidated comment."
+            else
+              echo "::warning::Could not post the consolidated comment (read-only token on a fork PR?)."
+            fi
           fi
