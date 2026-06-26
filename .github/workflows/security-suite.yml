@@ -54,7 +54,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@d46f419ad3c48566d29cf898634adb66fe16656a # feat/reusable-report-mode (pre-release; bump to the tag once #72 ships)
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@1dd4e2d29c56b608703ddab749eb980211cd3661 # v1.18.0
     with:
       report-mode: summary
 
@@ -62,14 +62,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@d46f419ad3c48566d29cf898634adb66fe16656a # feat/reusable-report-mode (pre-release; bump to the tag once #72 ships)
+    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@1dd4e2d29c56b608703ddab749eb980211cd3661 # v1.18.0
     with:
       report-mode: summary
 
   action-pinning:
     permissions:
       contents: read
-    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@eb33e7fd9d811e3665a354623edd76294e0bd8bc # v1.17.1
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@1dd4e2d29c56b608703ddab749eb980211cd3661 # v1.18.0
 
   actions-audit:
     name: zizmor (GitHub Actions audit)
