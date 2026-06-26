@@ -42,6 +42,18 @@ on:
         type: string
         required: false
         default: "project"
+      report-mode:
+        description: "comment (default): post or update the PR comment and open tracking issues. summary: stay quiet and only expose the outputs below, for an aggregator such as the Security Suite."
+        type: string
+        required: false
+        default: "comment"
+    outputs:
+      status:
+        description: "Result of the scan: ok, warn, fail, or error."
+        value: ${{ jobs.scan.outputs.status }}
+      total:
+        description: "Number of exposure matches found."
+        value: ${{ jobs.scan.outputs.total }}
 
 permissions:
   contents: read        # checkout the repository
@@ -53,6 +65,9 @@ jobs:
     name: bumblebee (${{ inputs.profile }} scan)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      status: ${{ steps.status.outputs.status }}
+      total: ${{ steps.findings.outputs.total }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -109,6 +124,25 @@ jobs:
           fi
           TOTAL=$(grep -c '"record_type":"finding"' bumblebee-findings.ndjson || true)
           echo "total=${TOTAL:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute status
+        id: status
+        if: always()
+        env:
+          SCAN_FAILED: ${{ steps.findings.outputs.scan_failed }}
+          TOTAL: ${{ steps.findings.outputs.total }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        run: |
+          if [ "${SCAN_FAILED}" = "true" ]; then
+            STATUS="error"
+          elif [ "${TOTAL:-0}" = "0" ]; then
+            STATUS="ok"
+          elif [ "${FAIL_ON_FINDINGS}" = "true" ]; then
+            STATUS="fail"
+          else
+            STATUS="warn"
+          fi
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
 
       - name: Emit inline annotations
         if: always() && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0'
@@ -179,7 +213,7 @@ jobs:
       - name: Post / update PR comment
         # GITHUB_TOKEN is read-only on fork PRs / Dependabot PRs. Degrade
         # gracefully — annotations + artifact still carry the report.
-        if: always() && github.event.pull_request.number != null
+        if: always() && inputs.report-mode != 'summary' && github.event.pull_request.number != null
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -211,7 +245,7 @@ jobs:
         # PR to comment on. Open one tracking issue per repo (label
         # `bumblebee-finding`), updating it idempotently via a marker
         # so re-runs don't spam.
-        if: always() && github.event.pull_request.number == null && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0'
+        if: always() && inputs.report-mode != 'summary' && github.event.pull_request.number == null && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
