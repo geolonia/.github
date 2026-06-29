@@ -87,7 +87,7 @@ jobs:
         # job (and the run) still passes, while we capture the outcome above.
         # Remove continue-on-error to make zizmor findings block the PR.
         continue-on-error: true
-        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
         with:
           # SARIF upload to the security tab needs GitHub Advanced Security,
           # which is not available on private repos without a license. Use
