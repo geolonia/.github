@@ -80,7 +80,7 @@ jobs:
           CONFIG_REPO: ${{ inputs.config-repo }}
           CONFIG_REF: ${{ inputs.config-ref }}
         run: |
-          if [ -f .pinact.yml ] || [ -f .pinact.yaml ] || [ -f pinact.yaml ] || [ -f .github/pinact.yaml ]; then
+          if [ -f .pinact.yaml ] || [ -f .pinact.yml ] || [ -f .github/pinact.yaml ] || [ -f .github/pinact.yml ]; then
             echo "Using this repo's own pinact config."
           elif [ -n "${CONFIG_REPO}" ]; then
             if gh api "repos/${CONFIG_REPO}/contents/.pinact.yml?ref=${CONFIG_REF}" \
@@ -96,9 +96,10 @@ jobs:
 
       - name: Verify action pins
         id: pinact
-        # Warn-only mode (fail-on-findings: false) needs to inspect the
-        # outcome, so let the step continue and decide in the next step.
-        continue-on-error: true
+        # In warn-only mode (fail-on-findings: false) let the step continue
+        # so the gate step can downgrade the failure to a warning. In the
+        # default (gating) mode it fails like a normal step.
+        continue-on-error: ${{ !inputs.fail-on-findings }}
         uses: suzuki-shunsuke/pinact-action@896d595f299e71d65b9d28349d6956abe144390a # v3.0.0
         with:
           # Validation only: pinact reports problems and exits non-zero,
@@ -112,18 +113,21 @@ jobs:
 
       - name: Status and gate
         id: status
+        # always() so the status output is still set when the pinact step
+        # failed in gating mode (where continue-on-error was false).
+        if: always()
         env:
           OUTCOME: ${{ steps.pinact.outcome }}
           FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         run: |
           if [ "${OUTCOME}" = "success" ]; then
             echo "status=ok" >> "$GITHUB_OUTPUT"
-            echo "All referenced actions are pinned and verified."
+            echo "All referenced actions are pinned, comment-matched, and meet the minimum release age."
           elif [ "${FAIL_ON_FINDINGS}" = "true" ]; then
             echo "status=fail" >> "$GITHUB_OUTPUT"
-            echo "::error::pinact found unpinned or comment-mismatched actions. Pin them (Dependabot keeps them current), then re-run."
+            echo "::error::pinact found an action that is unpinned, comment-mismatched, or below the .pinact.yml minimum release age. Fix per the job log (Dependabot keeps pins current), then re-run."
             exit 1
           else
             echo "status=warn" >> "$GITHUB_OUTPUT"
-            echo "::warning::pinact found unpinned or comment-mismatched actions. Not blocking (warn-only), but please SHA-pin them."
+            echo "::warning::pinact found an action that is unpinned, comment-mismatched, or below the .pinact.yml minimum release age. Not blocking (warn-only), but please address it."
           fi
