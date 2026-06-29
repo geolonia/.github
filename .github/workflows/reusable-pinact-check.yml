@@ -1,18 +1,24 @@
 name: "[REUSABLE] Action Pinning Check"
 
-# Per-PR gate that verifies every GitHub Action and reusable workflow
+# Per-PR check that verifies every GitHub Action and reusable workflow
 # referenced in the caller repo is:
 #
 #   1. pinned to a full 40-char commit SHA,
 #   2. annotated with a version comment that matches that SHA, and
-#   3. at least the minimum release age set in the repo's .pinact.yml
-#      (org default: 7 days).
+#   3. at least the minimum release age set in .pinact.yml (org default: 7
+#      days).
 #
 # It runs pinact in validation-only mode (fix: false): it never edits a
-# file or pushes a commit, it only fails the check when something is off.
-# Pair it with a repo-root .pinact.yml and Dependabot (github-actions,
-# weekly, with a matching cooldown) so pins stay current without manual
-# SHA edits.
+# file or pushes a commit.
+#
+# Config (centralized): pinact reads .pinact.yml from the repo root. When the
+# caller repo does not ship its own, this workflow fetches the canonical org
+# config from `config-repo` (default geolonia/.github) so the policy lives in
+# ONE place. A repo can override by committing its own .pinact.yml.
+#
+# Gating: by default a problem fails the check (fail-on-findings: true). Set
+# fail-on-findings: false for warn-only mode, where problems are reported as
+# warnings and the `status` output is `warn` instead of failing the job.
 #
 # Consumer wrapper (in any repo):
 #
@@ -32,6 +38,25 @@ on:
         type: string
         required: false
         default: "ubuntu-latest"
+      fail-on-findings:
+        description: "Fail the check when an action is unpinned or comment-mismatched. Set false for warn-only mode (reports a warning, does not block)."
+        type: boolean
+        required: false
+        default: true
+      config-repo:
+        description: "owner/repo to fetch the canonical .pinact.yml from when the caller repo has none. Set empty to disable the fallback (pinact then uses built-in defaults)."
+        type: string
+        required: false
+        default: "geolonia/.github"
+      config-ref:
+        description: "Git ref of the centralized .pinact.yml. Defaults to main so a policy change applies everywhere without bumping callers."
+        type: string
+        required: false
+        default: "main"
+    outputs:
+      status:
+        description: "Result of the check: ok, warn, or fail."
+        value: ${{ jobs.pinact.outputs.status }}
 
 permissions:
   contents: read
@@ -41,13 +66,39 @@ jobs:
     name: pinact (verify pins)
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 10
+    outputs:
+      status: ${{ steps.status.outputs.status }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
+      - name: Ensure pinact config
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFIG_REPO: ${{ inputs.config-repo }}
+          CONFIG_REF: ${{ inputs.config-ref }}
+        run: |
+          if [ -f .pinact.yml ] || [ -f .pinact.yaml ] || [ -f pinact.yaml ] || [ -f .github/pinact.yaml ]; then
+            echo "Using this repo's own pinact config."
+          elif [ -n "${CONFIG_REPO}" ]; then
+            if gh api "repos/${CONFIG_REPO}/contents/.pinact.yml?ref=${CONFIG_REF}" \
+                 -H "Accept: application/vnd.github.raw" > .pinact.yml 2>/dev/null && [ -s .pinact.yml ]; then
+              echo "::notice::No .pinact.yml in this repo; using the centralized config from ${CONFIG_REPO}@${CONFIG_REF}."
+            else
+              rm -f .pinact.yml
+              echo "::warning::Could not fetch the centralized .pinact.yml from ${CONFIG_REPO}@${CONFIG_REF}; pinact will use built-in defaults."
+            fi
+          else
+            echo "::warning::No pinact config in this repo and the centralized fallback is disabled; pinact will use built-in defaults."
+          fi
+
       - name: Verify action pins
+        id: pinact
+        # Warn-only mode (fail-on-findings: false) needs to inspect the
+        # outcome, so let the step continue and decide in the next step.
+        continue-on-error: true
         uses: suzuki-shunsuke/pinact-action@896d595f299e71d65b9d28349d6956abe144390a # v3.0.0
         with:
           # Validation only: pinact reports problems and exits non-zero,
@@ -58,3 +109,21 @@ jobs:
           # --verify-min-age: enforce the .pinact.yml minimum release age
           # against the currently pinned versions.
           verify_min_age: "true"
+
+      - name: Status and gate
+        id: status
+        env:
+          OUTCOME: ${{ steps.pinact.outcome }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        run: |
+          if [ "${OUTCOME}" = "success" ]; then
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+            echo "All referenced actions are pinned and verified."
+          elif [ "${FAIL_ON_FINDINGS}" = "true" ]; then
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "::error::pinact found unpinned or comment-mismatched actions. Pin them (Dependabot keeps them current), then re-run."
+            exit 1
+          else
+            echo "status=warn" >> "$GITHUB_OUTPUT"
+            echo "::warning::pinact found unpinned or comment-mismatched actions. Not blocking (warn-only), but please SHA-pin them."
+          fi
