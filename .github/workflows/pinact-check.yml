@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   pinact:
-    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@c13a68c741150b4151d463e347e77281d0703276 # v1.15.1
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
     # Verifies every GitHub Action in this repo is SHA-pinned, carries a
     # matching version comment, and meets the 7-day minimum release age
     # set in .pinact.yml. Dependabot (.github/dependabot.yml) keeps the
