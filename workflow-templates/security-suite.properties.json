@@ -1,0 +1,7 @@
+{
+  "name": "Security Suite (all checks)",
+  "description": "One PR gate that runs every Geolonia security scanner (bumblebee supply-chain, betterleaks secrets, pinact action-pinning, zizmor GitHub Actions audit) and posts a single consolidated comment. Prefer the org Security Suite ruleset where it is enabled; use this template for repos outside that ruleset.",
+  "iconName": "shield",
+  "categories": ["Automation"],
+  "filePatterns": []
+}
