@@ -1,7 +1,0 @@
-{
-  "name": "Action Pinning Check (per PR)",
-  "description": "Verify every GitHub Action is pinned to a commit SHA with a matching version comment and meets the org 7-day minimum release age, using pinact. Requires a .pinact.yml at the repo root.",
-  "iconName": "lock",
-  "categories": ["Automation"],
-  "filePatterns": [".github/workflows/.*"]
-}
