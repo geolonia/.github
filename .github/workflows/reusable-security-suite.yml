@@ -46,7 +46,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@1dd4e2d29c56b608703ddab749eb980211cd3661 # v1.18.0
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@df41a3d00b065911c95265251a6747b4108fc57c # v1.21.0
     with:
       report-mode: summary
 
@@ -54,14 +54,19 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@1dd4e2d29c56b608703ddab749eb980211cd3661 # v1.18.0
+    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@df41a3d00b065911c95265251a6747b4108fc57c # v1.21.0
     with:
       report-mode: summary
 
   action-pinning:
     permissions:
       contents: read
-    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@1dd4e2d29c56b608703ddab749eb980211cd3661 # v1.18.0
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@df41a3d00b065911c95265251a6747b4108fc57c # v1.21.0
+    with:
+      # Warn-only in the suite: an unpinned or comment-mismatched action
+      # reports a warning row instead of blocking the PR. (pinact also
+      # falls back to the centralized .pinact.yml when the repo has none.)
+      fail-on-findings: false
 
   actions-audit:
     name: zizmor (GitHub Actions audit)
@@ -118,7 +123,7 @@ jobs:
           SUPPLY_TOTAL: ${{ needs.supply-chain.outputs.total }}
           SECRET_STATUS: ${{ needs.secret-leak.outputs.status }}
           SECRET_TOTAL: ${{ needs.secret-leak.outputs.total }}
-          PIN_RESULT: ${{ needs.action-pinning.result }}
+          PIN_STATUS: ${{ needs.action-pinning.outputs.status }}
           ZIZMOR_STATUS: ${{ needs.actions-audit.outputs.status }}
         run: |
           set -euo pipefail
@@ -134,17 +139,11 @@ jobs:
             esac
           }
 
-          # pinact exposes no outputs; derive a token from its job result.
-          case "${PIN_RESULT}" in
-            success) PIN_STATUS=ok ;;
-            failure) PIN_STATUS=fail ;;
-            *) PIN_STATUS=error ;;
-          esac
-
           # Default empty outputs (e.g. a job that errored before setting one)
           # to "error" so the row is never blank.
           SUPPLY_STATUS="${SUPPLY_STATUS:-error}"
           SECRET_STATUS="${SECRET_STATUS:-error}"
+          PIN_STATUS="${PIN_STATUS:-error}"
           ZIZMOR_STATUS="${ZIZMOR_STATUS:-error}"
 
           msg() {
@@ -160,6 +159,7 @@ jobs:
           SECRET_MSG=$(msg "${SECRET_STATUS}" "No secrets in diff" "${SECRET_TOTAL:-?} potential secret(s)")
           case "${PIN_STATUS}" in
             ok) PIN_MSG="All actions pinned" ;;
+            warn) PIN_MSG="Unpinned or mismatched (warn-only; see run)" ;;
             fail) PIN_MSG="Unpinned or mismatched (see run)" ;;
             *) PIN_MSG="Did not complete" ;;
           esac
