@@ -13,7 +13,9 @@ name: Security Suite
 
 on:
   pull_request:
-    branches: [main]
+    # The template picker replaces $default-branch with the adopting repo's
+    # default branch, so this works for repos that do not use `main`.
+    branches: ["$default-branch"]
 
 concurrency:
   group: security-suite-${{ github.event.pull_request.number || github.ref }}
