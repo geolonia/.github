@@ -91,6 +91,10 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.tag || github.ref }}
+          # Docs are built from the checkout and published to S3 via OIDC;
+          # the checkout git credentials are never reused, so drop them
+          # (zizmor artipacked).
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -99,7 +103,10 @@ jobs:
           package-manager-cache: false
 
       - name: Install TechDocs CLI
-        run: npm i -g @techdocs/cli@${{ env.TECHDOCS_CLI_VER }}
+        # Reference the workflow-level env as a shell var (not a ${{ }}
+        # expansion) so it never expands into the script (zizmor
+        # template-injection).
+        run: npm i -g "@techdocs/cli@${TECHDOCS_CLI_VER}"
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -109,7 +116,7 @@ jobs:
       - name: Install MkDocs + TechDocs core
         run: |
           python -m pip install --upgrade pip
-          pip install "mkdocs-techdocs-core${{ env.MKDOCS_CORE_VER }}"
+          pip install "mkdocs-techdocs-core${MKDOCS_CORE_VER}"
           pip install "mkdocs-git-revision-date-localized-plugin>=1,<2"
 
       - name: Resolve TechDocs entity from catalog-info.yaml (fallback)
@@ -120,12 +127,16 @@ jobs:
             cmd: yq -r 'select(.kind == "Component") | [.metadata.namespace // "default", (.kind // "Component" | downcase), .metadata.name] | join("/")' catalog-info.yaml
 
       - name: Get final TECHDOCS_ENTITY
+        env:
+          # Indirect the step output through env so it is not expanded into
+          # the script (zizmor template-injection).
+          TECHDOCS_ENTITY_YAML: ${{ steps.techdocs_entity_yaml.outputs.result }}
         run: |
           # Precedence:
           # 1) workflow input
           # 2) repo/org variable
           # 3) catalog-info.yaml
-          ENTITY="${TECHDOCS_ENTITY_INPUT:-${TECHDOCS_ENTITY_VAR:-${{ steps.techdocs_entity_yaml.outputs.result }}}}"
+          ENTITY="${TECHDOCS_ENTITY_INPUT:-${TECHDOCS_ENTITY_VAR:-${TECHDOCS_ENTITY_YAML}}}"
 
           if [ -z "$ENTITY" ]; then
             echo "ERROR: Could not resolve TECHDOCS_ENTITY (no input, no var, catalog-info.yaml missing metadata.name?)"

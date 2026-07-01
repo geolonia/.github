@@ -41,3 +41,10 @@ rules:
       policies:
         "geolonia/*": ref-pin
         "*": hash-pin
+  # Accepted: the TechDocs publish job installs its build toolchain
+  # (@techdocs/cli via npm, mkdocs plugins via pip) at run time. These
+  # publishing tools are not part of any repo lockfile, so an ad-hoc install
+  # is expected. Scoped to the filename (zizmor `ignore` is exact-basename).
+  adhoc-packages:
+    ignore:
+      - reusable-backstage-techdocs.yml

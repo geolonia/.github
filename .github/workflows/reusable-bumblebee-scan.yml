@@ -310,8 +310,10 @@ jobs:
 
       - name: Fail the job if findings + fail-on-findings
         if: always() && steps.findings.outputs.scan_failed != 'true' && steps.findings.outputs.total != '0' && inputs.fail-on-findings == true
+        env:
+          TOTAL: ${{ steps.findings.outputs.total }}
         run: |
-          echo "::error::Bumblebee scan failed: ${{ steps.findings.outputs.total }} exposure match(es) found."
+          echo "::error::Bumblebee scan failed: ${TOTAL} exposure match(es) found."
           exit 1
 
       - name: Surface scan-level failure

@@ -36,6 +36,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # This job only reads catalog-info.yaml and dispatches via an App
+          # token; it never uses the checkout credentials for git, so do not
+          # leave them on disk (zizmor artipacked).
+          persist-credentials: false
 
       - name: Install yq
         uses: mikefarah/yq@1b9b4ac5187171d2e5e3129be0cfa827c7f9d53d # v4.53.3
@@ -87,6 +92,10 @@ jobs:
           private-key: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
           repositories: ${{ steps.target.outputs.repo_name }}
           owner: ${{ github.repository_owner }}
+          # Least privilege: the token only sends a repository_dispatch to the
+          # central repo, which needs contents write. Already narrowed to a
+          # single repo above; also narrow the permission set.
+          permission-contents: write
 
       - name: Dispatch sync request
         env:

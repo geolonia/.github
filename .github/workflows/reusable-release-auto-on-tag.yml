@@ -78,9 +78,16 @@ jobs:
       - name: Parse tag (semver)
         id: semver
         shell: bash
+        env:
+          # Indirect through env so the values never expand into the shell
+          # source (zizmor template-injection). tag_override wins when set,
+          # else the pushed tag ref.
+          TAG_OVERRIDE: ${{ inputs.tag_override }}
+          REF_NAME: ${{ github.ref_name }}
+          TAG_PATTERN: ${{ inputs.tag_pattern }}
         run: |
-          TAG="${{ inputs.tag_override != '' && inputs.tag_override || github.ref_name }}"
-          PATTERN="${{ inputs.tag_pattern }}"
+          TAG="${TAG_OVERRIDE:-$REF_NAME}"
+          PATTERN="$TAG_PATTERN"
           if [[ ! "$TAG" =~ $PATTERN ]]; then
             echo "Tag '$TAG' does not match expected pattern: $PATTERN"
             exit 1
@@ -126,27 +133,36 @@ jobs:
         with:
           client-id: ${{ secrets.WORKFLOWS_CLIENT_ID }}
           private-key: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
+          # Least privilege: this token only force-pushes the moved vX / vX.Y
+          # tags, which is a contents write. Scope it so a leak cannot touch
+          # anything else the app is installed for.
+          permission-contents: write
 
       - name: Use App token for pushes
+        env:
+          GH_APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          REPO: ${{ github.repository }}
         run: |
-          git remote set-url origin "https://x-access-token:${{ steps.app_token.outputs.token }}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${GH_APP_TOKEN}@github.com/${REPO}.git"
           git config user.name  "geolonia-release[app]"
           git config user.email "geolonia-release[app]@users.noreply.github.com"
 
       - name: Move/update MINOR tag (vX.Y)
         if: ${{ inputs.move_minor_tag }}
         shell: bash
+        env:
+          MINOR: ${{ steps.semver.outputs.minor }}
+          TAG: ${{ steps.semver.outputs.tag }}
         run: |
-          MINOR="${{ steps.semver.outputs.minor }}"
-          TAG="${{ steps.semver.outputs.tag }}"
           git tag -f "$MINOR" "$TAG"
           git push -f origin "$MINOR"
 
       - name: Move/update MAJOR tag (vX)
         if: ${{ inputs.move_major_tag }}
         shell: bash
+        env:
+          MAJOR: ${{ steps.semver.outputs.major }}
+          TAG: ${{ steps.semver.outputs.tag }}
         run: |
-          MAJOR="${{ steps.semver.outputs.major }}"
-          TAG="${{ steps.semver.outputs.tag }}"
           git tag -f "$MAJOR" "$TAG"
           git push -f origin "$MAJOR"
