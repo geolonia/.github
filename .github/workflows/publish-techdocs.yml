@@ -10,5 +10,14 @@ on:
 
 jobs:
   publish:
+    # Explicit least-privilege ceiling for the reusable (OIDC publish +
+    # checkout); avoids the repo-default token (zizmor excessive-permissions).
+    permissions:
+      contents: read
+      id-token: write
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
-    secrets: inherit
+    # Pass only the secrets the reusable declares, not `secrets: inherit`
+    # (zizmor secrets-inherit). Both are optional (empty when unset).
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      TECHDOCS_AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}

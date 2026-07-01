@@ -10,7 +10,11 @@ permissions:
 jobs:
   route:
     uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
-    secrets: inherit
+    # Pass only the dispatch secrets the reusable declares, not
+    # `secrets: inherit` (zizmor secrets-inherit).
+    secrets:
+      OPS_DISPATCH_CLIENT_ID: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+      OPS_DISPATCH_APP_PRIVATE_KEY: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
     # When you set an issue's org Department field, the issue is added to that
     # team's project board. Keep this workflow on the default branch so the
     # issues trigger fires.
