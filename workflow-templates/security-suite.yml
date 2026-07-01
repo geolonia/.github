@@ -33,5 +33,4 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      checks: read # report job reads zizmor check-run annotations
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@39820bb4238be1f3160e8d705c7c2942013711cb # v1.24.0
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@d3e2831cf22c560198fc511fbb0a1be5c7361d2a # v1.25.0
