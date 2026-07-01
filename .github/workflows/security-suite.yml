@@ -40,4 +40,4 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@63e21d7f7f58f814bf2cc6add0b874a5f6a0d6d6 # v1.20.0
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@d32aef43567e5b8d55e302a8988125f66ec92786 # v1.22.0
