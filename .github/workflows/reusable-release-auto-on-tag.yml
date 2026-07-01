@@ -72,7 +72,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          persist-credentials: true
+          # Do not leave the GITHUB_TOKEN auth config on disk. checkout's
+          # persisted `http.<host>.extraheader` would otherwise override the
+          # App-token URL set in "Use App token for pushes", so the tag moves
+          # could push as GITHUB_TOKEN instead of the App (which is the
+          # identity allowed to bypass the tag-immutability ruleset). Nothing
+          # between here and that step uses the checkout credentials.
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Parse tag (semver)
