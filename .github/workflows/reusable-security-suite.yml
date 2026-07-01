@@ -193,8 +193,12 @@ jobs:
             CRID=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
               --jq "[.check_runs[] | select(.name | test(\"zizmor\"; \"i\")) | select(.details_url | test(\"/runs/${RUN_ID}/\"))] | .[0].id // empty" 2>/dev/null || true)
             if [ -n "${CRID}" ]; then
-              gh api "repos/${REPO}/check-runs/${CRID}/annotations?per_page=100" > ann.json 2>/dev/null || echo '[]' > ann.json
-              REAL='[.[] | select((.message | contains("Process completed with exit code")) | not)]'
+              # --paginate --slurp collects every page into one array of
+              # page-arrays (flatten with .[][]); a check run can have more
+              # than one page of annotations. --slurp is safe here because we
+              # write to a file and run jq separately (not with --jq).
+              gh api --paginate --slurp "repos/${REPO}/check-runs/${CRID}/annotations?per_page=100" > ann.json 2>/dev/null || echo '[]' > ann.json
+              REAL='[.[][] | select((.message | contains("Process completed with exit code")) | not)]'
               ZIZMOR_ERRORS=$(jq "${REAL} | map(select(.annotation_level == \"failure\")) | length" ann.json 2>/dev/null || echo 0)
               ZIZMOR_WARNINGS=$(jq "${REAL} | map(select(.annotation_level == \"warning\")) | length" ann.json 2>/dev/null || echo 0)
             fi
