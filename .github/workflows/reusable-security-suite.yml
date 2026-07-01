@@ -129,7 +129,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # post / update the consolidated comment
+      checks: read # read the zizmor check-run annotations to tally severity
     steps:
       - name: Build and post consolidated comment
         env:
@@ -190,8 +191,8 @@ jobs:
           ZIZMOR_ERRORS=0
           ZIZMOR_WARNINGS=0
           if [ "${ZIZMOR_STATUS}" != "ok" ]; then
-            CRID=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
-              --jq "[.check_runs[] | select(.name | test(\"zizmor\"; \"i\")) | select(.details_url | test(\"/runs/${RUN_ID}/\"))] | .[0].id // empty" 2>/dev/null || true)
+            CRID=$(gh api --paginate --slurp "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" 2>/dev/null \
+              | jq -r "[.[].check_runs[] | select(.name | test(\"zizmor\"; \"i\")) | select(.details_url | test(\"/runs/${RUN_ID}/\"))] | .[0].id // empty" 2>/dev/null || true)
             if [ -n "${CRID}" ]; then
               # --paginate --slurp collects every page into one array of
               # page-arrays (flatten with .[][]); a check run can have more
