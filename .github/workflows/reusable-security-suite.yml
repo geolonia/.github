@@ -206,6 +206,11 @@ jobs:
           # high pass), so no Checks-API read is needed here.
           if [ "${ZIZMOR_STATUS}" = "ok" ]; then
             ZIZMOR_GLYPH="✅"; ZIZMOR_SEV="ok"; ZIZMOR_MSG="No findings"
+          elif [ "${ZIZMOR_STATUS}" != "warn" ]; then
+            # status defaulted to "error" (the actions-audit job did not
+            # publish outputs, e.g. it failed/was skipped) -> surface it as a
+            # scan error, not warning-only findings.
+            ZIZMOR_GLYPH="🟠"; ZIZMOR_SEV="error"; ZIZMOR_MSG="Scan error (see run)"
           elif [ "${ZIZMOR_HAS_ERRORS}" = "true" ]; then
             ZIZMOR_GLYPH="❗"; ZIZMOR_SEV="error"
             ZIZMOR_MSG="Error-severity findings (warn-only; see annotations)"
