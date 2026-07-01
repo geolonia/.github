@@ -5,7 +5,8 @@ name: Security Suite
 # and posts a single consolidated PR comment.
 #
 # This is a thin caller of the org reusable, so it stays current as the
-# suite evolves; Dependabot bumps the pinned ref below.
+# suite evolves: it floats on the reusable's major tag (@v1), which a
+# vX.Y.Z release fast-forwards, so there is nothing to bump here.
 #
 # Note: if your repo is already covered by the org "Security Suite" ruleset,
 # you do not need this file (it would run the suite twice). Use this template
@@ -33,4 +34,4 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@d3e2831cf22c560198fc511fbb0a1be5c7361d2a # v1.25.0
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@v1

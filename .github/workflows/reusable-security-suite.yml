@@ -33,6 +33,11 @@ name: "[REUSABLE] Security Suite"
 # Rollout ramp: zizmor runs warn-only (its step is continue-on-error) so we
 # can observe findings org-wide before blocking. Flip to enforce by removing
 # continue-on-error from the Run zizmor step.
+#
+# Pinning: the sibling scanner reusables below float on our major tag (@v1) so
+# a scanner change ships without bumping this file; the org .pinact.yml exempts
+# geolonia/.github reusables at a major tag from SHA-pinning. Third-party
+# actions used inside jobs (checkout, zizmor-action) stay SHA-pinned as normal.
 
 on:
   workflow_call:
@@ -46,7 +51,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@df41a3d00b065911c95265251a6747b4108fc57c # v1.21.0
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@v1
     with:
       report-mode: summary
 
@@ -54,14 +59,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@df41a3d00b065911c95265251a6747b4108fc57c # v1.21.0
+    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@v1
     with:
       report-mode: summary
 
   action-pinning:
     permissions:
       contents: read
-    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@df41a3d00b065911c95265251a6747b4108fc57c # v1.21.0
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
     with:
       # Warn-only in the suite: an unpinned or comment-mismatched action
       # reports a warning row instead of blocking the PR. (pinact also
