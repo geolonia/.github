@@ -19,4 +19,25 @@
 #   template-injection:
 #     ignore:
 #       - route-issue.yml   # title/body only reaches a trusted internal step
-rules: {}
+rules:
+  # unpinned-uses policies are matched by repo pattern (owner/repo, owner/*,
+  # *), NOT by filename, so this applies org-wide (unlike the `ignore` list
+  # above). Our own reusable workflows float on a bot-moved major tag (@v1)
+  # by design: a vX.Y.Z release fast-forwards vX, so a symbolic ref is the
+  # intended state for them. Allow ref-pin for the geolonia org and keep the
+  # strict hash-pin blanket policy for every other (third-party) action.
+  # Mirrors the matching .pinact.yml exemption; see that file for the full
+  # rationale.
+  #
+  # Scope note: this uses the owner glob `geolonia/*`, not an exact repo. A
+  # reusable-workflow `uses:` carries the full path (geolonia/.github/.github/
+  # workflows/x.yml), which zizmor's exact `owner/repo` pattern does not
+  # match; only the owner glob does. This lines up with pinact's own `geolonia/*`
+  # scope. ref-pin also permits a branch ref like @main, but pinact still
+  # flags anything other than a bare major tag, so the combined gate keeps
+  # mutable refs out.
+  unpinned-uses:
+    config:
+      policies:
+        "geolonia/*": ref-pin
+        "*": hash-pin
