@@ -1,0 +1,22 @@
+# Centralized zizmor ignore-list (allow-list) for the Geolonia org.
+#
+# The Security Suite fetches this file when a repo has no zizmor.yml of its
+# own, so org-wide accepted findings are suppressed in ONE place (the same
+# pattern as the canonical .pinact.yml). A repo can override by committing
+# its own zizmor.yml.
+#
+# IMPORTANT: zizmor's `ignore` entries are matched by exact workflow
+# filename (optionally `name.yml:line` or `name.yml:line:col`); globs like
+# `*.yml` are NOT supported. So an entry suppresses a rule only in files
+# with that basename. That is ideal for the org-standard workflows that are
+# copied into many repos (route-issue.yml, publish-techdocs.yml, ...), but
+# it cannot disable a rule everywhere. Prefer fixing over ignoring; keep
+# every entry below justified.
+#
+# Example (uncomment + justify when the org accepts a finding):
+#
+# rules:
+#   template-injection:
+#     ignore:
+#       - route-issue.yml   # title/body only reaches a trusted internal step
+rules: {}
