@@ -58,3 +58,23 @@ rules:
     conditions:
       - expr: |
           ActionName matches "geolonia/.*"
+  # Let geolonia/.github reusable workflows float on a major tag (v1, v2, ...)
+  # instead of being SHA-pinned. Our reusables use bot-moved major tags by
+  # design (a vX.Y.Z push fast-forwards vX), so a caller pinned to @v1 always
+  # gets the newest release with no chain-bump. That is what the org "Security
+  # Suite" ruleset relies on: security-suite.yml -> reusable-security-suite.yml
+  # -> the scanner reusables, all at @v1, so a suite change ships in one
+  # release instead of a caller-bump-per-release treadmill.
+  #
+  # Scope and safety: this only exempts references to geolonia org actions and
+  # reusables at a bare major tag (^v[0-9]+$). SHA pins still pass (ignore
+  # never forces un-pinning), and mutable refs like @main or a branch are
+  # still flagged. It reuses the same `geolonia/*` scope as the cooldown
+  # exemption above, on the same "we author and control these releases" basis;
+  # a hijacked @v1 here is the same threat as this repo being compromised.
+  # (The org zizmor.yml mirrors this with an unpinned-uses ref-pin policy for
+  # `geolonia/*`.) Third-party actions remain SHA-pinned as normal.
+  - ignore: true
+    conditions:
+      - expr: |
+          ActionName matches "geolonia/.*" && ActionVersion matches "^v[0-9]+$"

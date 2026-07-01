@@ -40,4 +40,9 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@d3e2831cf22c560198fc511fbb0a1be5c7361d2a # v1.25.0
+    # Float on the major tag: a vX.Y.Z release fast-forwards @v1, so this
+    # caller picks up every suite change with no chain-bump. This is a
+    # same-repo reference to our own reusable; the org .pinact.yml exempts
+    # geolonia/.github reusables at a major tag from SHA-pinning (third-party
+    # actions stay pinned). See .pinact.yml for the rationale.
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@v1
