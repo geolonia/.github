@@ -81,6 +81,25 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Ensure zizmor config
+        # Centralized ignore-list: when the repo ships no zizmor.yml, fetch
+        # the canonical one from geolonia/.github@main so org-wide accepted
+        # findings are suppressed in one place. zizmor auto-discovers a
+        # zizmor.yml at the repo root. A repo can override with its own.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFIG_REPO: geolonia/.github
+          CONFIG_REF: main
+        run: |
+          if [ -f zizmor.yml ] || [ -f zizmor.yaml ] || [ -f .github/zizmor.yml ] || [ -f .github/zizmor.yaml ]; then
+            echo "Using this repo's own zizmor config."
+          elif gh api "repos/${CONFIG_REPO}/contents/zizmor.yml?ref=${CONFIG_REF}" \
+                 -H "Accept: application/vnd.github.raw" > zizmor.yml 2>/dev/null && [ -s zizmor.yml ]; then
+            echo "::notice::No zizmor.yml in this repo; using the centralized ignore-list from ${CONFIG_REPO}@${CONFIG_REF}."
+          else
+            rm -f zizmor.yml
+            echo "No centralized zizmor config available; zizmor uses its defaults."
+          fi
       - name: Run zizmor
         id: zizmor
         # Warn-only during rollout: the step swallows its own failure so the
@@ -118,6 +137,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SUPPLY_STATUS: ${{ needs.supply-chain.outputs.status }}
           SUPPLY_TOTAL: ${{ needs.supply-chain.outputs.total }}
@@ -163,17 +183,44 @@ jobs:
             fail) PIN_MSG="Unpinned or mismatched (see run)" ;;
             *) PIN_MSG="Did not complete" ;;
           esac
-          case "${ZIZMOR_STATUS}" in
-            ok) ZIZMOR_MSG="No findings" ;;
-            warn) ZIZMOR_MSG="Findings (warn-only; see annotations)" ;;
-            *) ZIZMOR_MSG="Did not complete" ;;
-          esac
 
-          # Overall callout: a real failure outranks a warning.
-          ALL="${SUPPLY_STATUS} ${SECRET_STATUS} ${PIN_STATUS} ${ZIZMOR_STATUS}"
-          if printf '%s' "${ALL}" | grep -qw "fail" || printf '%s' "${ALL}" | grep -qw "error"; then
+          # zizmor is warn-only, but distinguish error-severity from warning-
+          # severity findings so the summary does not understate errors.
+          # Count this run's zizmor annotations by level from its check run.
+          ZIZMOR_ERRORS=0
+          ZIZMOR_WARNINGS=0
+          if [ "${ZIZMOR_STATUS}" != "ok" ]; then
+            CRID=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+              --jq "[.check_runs[] | select(.name | test(\"zizmor\"; \"i\")) | select(.details_url | test(\"/runs/${RUN_ID}/\"))] | .[0].id // empty" 2>/dev/null || true)
+            if [ -n "${CRID}" ]; then
+              gh api "repos/${REPO}/check-runs/${CRID}/annotations?per_page=100" > ann.json 2>/dev/null || echo '[]' > ann.json
+              REAL='[.[] | select((.message | contains("Process completed with exit code")) | not)]'
+              ZIZMOR_ERRORS=$(jq "${REAL} | map(select(.annotation_level == \"failure\")) | length" ann.json 2>/dev/null || echo 0)
+              ZIZMOR_WARNINGS=$(jq "${REAL} | map(select(.annotation_level == \"warning\")) | length" ann.json 2>/dev/null || echo 0)
+            fi
+          fi
+
+          if [ "${ZIZMOR_STATUS}" = "ok" ]; then
+            ZIZMOR_GLYPH="✅"; ZIZMOR_MSG="No findings"; ZIZMOR_SEV="ok"
+          elif [ "${ZIZMOR_ERRORS:-0}" -gt 0 ]; then
+            ZIZMOR_GLYPH="❗"; ZIZMOR_SEV="error"
+            ZIZMOR_MSG="${ZIZMOR_ERRORS} error(s), ${ZIZMOR_WARNINGS} warning(s) (warn-only; see annotations)"
+          elif [ "${ZIZMOR_WARNINGS:-0}" -gt 0 ]; then
+            ZIZMOR_GLYPH="⚠️"; ZIZMOR_SEV="warn"
+            ZIZMOR_MSG="${ZIZMOR_WARNINGS} warning(s) (warn-only; see annotations)"
+          else
+            ZIZMOR_GLYPH="⚠️"; ZIZMOR_SEV="warn"; ZIZMOR_MSG="Findings (warn-only; see annotations)"
+          fi
+
+          # Overall callout. Hard gates (bumblebee/betterleaks/pinact) can
+          # block; zizmor is warn-only (never blocks) but error-severity
+          # findings still escalate the callout so they are not hidden.
+          GATES="${SUPPLY_STATUS} ${SECRET_STATUS} ${PIN_STATUS}"
+          if printf '%s' "${GATES}" | grep -qwE "fail|error"; then
             CALLOUT="> [!CAUTION]"$'\n'"> A required check did not pass. See the rows above and the workflow run."
-          elif printf '%s' "${ALL}" | grep -qw "warn"; then
+          elif [ "${ZIZMOR_SEV}" = "error" ]; then
+            CALLOUT="> [!CAUTION]"$'\n'"> zizmor found error-severity issues. They are warn-only (they do not block this PR), but please address them."
+          elif printf '%s' "${GATES}" | grep -qw "warn" || [ "${ZIZMOR_SEV}" = "warn" ]; then
             CALLOUT="> [!WARNING]"$'\n'"> Warnings only. These do not block the PR, but please review them."
           else
             CALLOUT="> [!NOTE]"$'\n'"> All security checks passed."
@@ -190,7 +237,7 @@ jobs:
             echo "| $(glyph "${SUPPLY_STATUS}") Supply chain · \`bumblebee\` | ${SUPPLY_MSG} |"
             echo "| $(glyph "${SECRET_STATUS}") Secrets · \`betterleaks\` | ${SECRET_MSG} |"
             echo "| $(glyph "${PIN_STATUS}") Action pinning · \`pinact\` | ${PIN_MSG} |"
-            echo "| $(glyph "${ZIZMOR_STATUS}") Actions audit · \`zizmor\` | ${ZIZMOR_MSG} |"
+            echo "| ${ZIZMOR_GLYPH} Actions audit · \`zizmor\` | ${ZIZMOR_MSG} |"
             echo ""
             echo "${CALLOUT}"
             echo ""
