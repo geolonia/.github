@@ -76,6 +76,9 @@ jobs:
     outputs:
       # ok when zizmor exits clean, warn otherwise (warn-only rollout).
       status: ${{ steps.zizmor.outcome == 'success' && 'ok' || 'warn' }}
+      # true when the high-severity pass found error-severity issues, so the
+      # summary can flag errors distinctly (computed in-job, no Checks API).
+      has-errors: ${{ steps.zizmor-high.outcome == 'failure' && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -120,6 +123,19 @@ jobs:
           # the action SHA, and Dependabot advances it when it bumps the
           # action. Do not request a CLI version newer than the pinned
           # action knows, or it fails with "Unknown version".
+      - name: Detect error-severity findings
+        id: zizmor-high
+        # A second pass at min-severity: high. Its outcome (failure = found
+        # high-severity issues) drives the summary's error vs warning split,
+        # computed in-job so the report job needs no Checks API access.
+        # annotations: false so it does not duplicate the inline annotations
+        # from the run above; it reuses the same auto-discovered zizmor.yml.
+        continue-on-error: true
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
+        with:
+          advanced-security: false
+          annotations: false
+          min-severity: high
 
   report:
     name: Security Suite summary
@@ -130,7 +146,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # post / update the consolidated comment
-      checks: read # read the zizmor check-run annotations to tally severity
     steps:
       - name: Build and post consolidated comment
         env:
@@ -138,7 +153,6 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          RUN_ID: ${{ github.run_id }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SUPPLY_STATUS: ${{ needs.supply-chain.outputs.status }}
           SUPPLY_TOTAL: ${{ needs.supply-chain.outputs.total }}
@@ -146,6 +160,7 @@ jobs:
           SECRET_TOTAL: ${{ needs.secret-leak.outputs.total }}
           PIN_STATUS: ${{ needs.action-pinning.outputs.status }}
           ZIZMOR_STATUS: ${{ needs.actions-audit.outputs.status }}
+          ZIZMOR_HAS_ERRORS: ${{ needs.actions-audit.outputs.has-errors }}
         run: |
           set -euo pipefail
           MARKER="<!-- security-suite-v1 -->"
@@ -186,35 +201,17 @@ jobs:
           esac
 
           # zizmor is warn-only, but distinguish error-severity from warning-
-          # severity findings so the summary does not understate errors.
-          # Count this run's zizmor annotations by level from its check run.
-          ZIZMOR_ERRORS=0
-          ZIZMOR_WARNINGS=0
-          if [ "${ZIZMOR_STATUS}" != "ok" ]; then
-            CRID=$(gh api --paginate --slurp "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" 2>/dev/null \
-              | jq -r "[.[].check_runs[] | select(.name | test(\"zizmor\"; \"i\")) | select(.details_url | test(\"/runs/${RUN_ID}/\"))] | .[0].id // empty" 2>/dev/null || true)
-            if [ -n "${CRID}" ]; then
-              # --paginate --slurp collects every page into one array of
-              # page-arrays (flatten with .[][]); a check run can have more
-              # than one page of annotations. --slurp is safe here because we
-              # write to a file and run jq separately (not with --jq).
-              gh api --paginate --slurp "repos/${REPO}/check-runs/${CRID}/annotations?per_page=100" > ann.json 2>/dev/null || echo '[]' > ann.json
-              REAL='[.[][] | select((.message | contains("Process completed with exit code")) | not)]'
-              ZIZMOR_ERRORS=$(jq "${REAL} | map(select(.annotation_level == \"failure\")) | length" ann.json 2>/dev/null || echo 0)
-              ZIZMOR_WARNINGS=$(jq "${REAL} | map(select(.annotation_level == \"warning\")) | length" ann.json 2>/dev/null || echo 0)
-            fi
-          fi
-
+          # severity findings so the summary does not understate errors. The
+          # actions-audit job computes has-errors in-job (a second min-severity:
+          # high pass), so no Checks-API read is needed here.
           if [ "${ZIZMOR_STATUS}" = "ok" ]; then
-            ZIZMOR_GLYPH="✅"; ZIZMOR_MSG="No findings"; ZIZMOR_SEV="ok"
-          elif [ "${ZIZMOR_ERRORS:-0}" -gt 0 ]; then
+            ZIZMOR_GLYPH="✅"; ZIZMOR_SEV="ok"; ZIZMOR_MSG="No findings"
+          elif [ "${ZIZMOR_HAS_ERRORS}" = "true" ]; then
             ZIZMOR_GLYPH="❗"; ZIZMOR_SEV="error"
-            ZIZMOR_MSG="${ZIZMOR_ERRORS} error(s), ${ZIZMOR_WARNINGS} warning(s) (warn-only; see annotations)"
-          elif [ "${ZIZMOR_WARNINGS:-0}" -gt 0 ]; then
-            ZIZMOR_GLYPH="⚠️"; ZIZMOR_SEV="warn"
-            ZIZMOR_MSG="${ZIZMOR_WARNINGS} warning(s) (warn-only; see annotations)"
+            ZIZMOR_MSG="Error-severity findings (warn-only; see annotations)"
           else
-            ZIZMOR_GLYPH="⚠️"; ZIZMOR_SEV="warn"; ZIZMOR_MSG="Findings (warn-only; see annotations)"
+            ZIZMOR_GLYPH="⚠️"; ZIZMOR_SEV="warn"
+            ZIZMOR_MSG="Warning-severity findings (warn-only; see annotations)"
           fi
 
           # Overall callout. Hard gates (bumblebee/betterleaks/pinact) can
