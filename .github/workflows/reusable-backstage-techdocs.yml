@@ -54,11 +54,15 @@ on:
         type: string
 
     secrets:
+      # An AWS account ID is a non-sensitive identifier. Prefer setting it as
+      # an org/repo variable (vars.AWS_ACCOUNT_ID / vars.TECHDOCS_AWS_ACCOUNT_ID),
+      # which reusable workflows read automatically — then the caller needs no
+      # `secrets:` block at all. These secret inputs remain for back-compat.
       AWS_ACCOUNT_ID:
-        description: "Account ID (used to build default role ARN)"
+        description: "Account ID (used to build default role ARN). Prefer vars.AWS_ACCOUNT_ID."
         required: false
       TECHDOCS_AWS_ACCOUNT_ID:
-        description: "Org-level fallback Account ID (if AWS_ACCOUNT_ID not provided)"
+        description: "Org-level fallback Account ID. Prefer the org variable vars.TECHDOCS_AWS_ACCOUNT_ID."
         required: false
 
 env:
@@ -69,7 +73,9 @@ env:
   MKDOCS_CORE_VER:        ${{ inputs.mkdocs_core_version || vars.MKDOCS_TECHDOCS_CORE_VERSION || '>=1.6,<2.0' }}
 
   AWS_REGION:             ${{ inputs.aws_region || vars.AWS_REGION || 'ap-northeast-1' }}
-  AWS_ACCOUNT_ID:         ${{ secrets.AWS_ACCOUNT_ID || secrets.TECHDOCS_AWS_ACCOUNT_ID }}
+  # secrets first (back-compat), then vars — so callers can supply the account
+  # ID via an org/repo variable and omit the `secrets:` block entirely.
+  AWS_ACCOUNT_ID:         ${{ secrets.AWS_ACCOUNT_ID || secrets.TECHDOCS_AWS_ACCOUNT_ID || vars.AWS_ACCOUNT_ID || vars.TECHDOCS_AWS_ACCOUNT_ID }}
 
   TECHDOCS_BUCKET:        ${{ inputs.techdocs_bucket || vars.TECHDOCS_BUCKET || 'geolonia-backstage-techdocs' }}
   TECHDOCS_ENTITY_INPUT:  ${{ inputs.techdocs_entity }}
