@@ -14,7 +14,7 @@ The suite runs on every targeted repo with **no workflow file in that repo**,
 via an organization **ruleset** ("Require workflows to pass before merging")
 that points at:
 
-```
+```text
 geolonia/.github/.github/workflows/security-suite.yml@refs/tags/v1
 ```
 
