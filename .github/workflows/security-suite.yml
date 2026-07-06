@@ -40,9 +40,13 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    # Float on the major tag: a vX.Y.Z release fast-forwards @v1, so this
-    # caller picks up every suite change with no chain-bump. This is a
-    # same-repo reference to our own reusable; the org .pinact.yml exempts
-    # geolonia/.github reusables at a major tag from SHA-pinning (third-party
-    # actions stay pinned). See .pinact.yml for the rationale.
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@v1
+    # MUST be an immutable ref (SHA), NOT a floating @v1. This file is the
+    # org "required workflow" (ruleset "require workflows"); the required-
+    # workflow injector refuses to run when the required workflow's own
+    # reusable is referenced by a moving tag, so a @v1 here silently produces
+    # NO run and the required check hangs at "Expected" forever on every
+    # consumer PR. Pinning to a release SHA is what makes the gate actually
+    # fire. The inner scanner refs inside reusable-security-suite.yml stay at
+    # @v1 (they resolve fine at runtime); only this top-level required-workflow
+    # reference must be pinned. Bump this SHA on each suite release.
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@82a98a9b4b4f75f1f064a85a7ebc720bbcc953f5 # v1.28.0
