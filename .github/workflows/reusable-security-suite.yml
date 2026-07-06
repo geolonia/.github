@@ -30,9 +30,11 @@ name: "[REUSABLE] Security Suite"
 # issues: write (bumblebee tracking issue on non-PR triggers), so the CALLER
 # job's `uses:` must grant that union; each job here narrows to what it needs.
 #
-# Rollout ramp: zizmor runs warn-only (its step is continue-on-error) so we
-# can observe findings org-wide before blocking. Flip to enforce by removing
-# continue-on-error from the Run zizmor step.
+# Gating: zizmor ERROR-severity findings block the PR (the report job exits 1
+# on them); zizmor warnings/notices are warn-only. The zizmor step itself stays
+# continue-on-error so it always emits annotations + the severity counts, and
+# the report job is the single gate. bumblebee/betterleaks are hard gates too
+# (their jobs fail on findings); pinact is warn-only in the suite.
 #
 # Pinning: the sibling scanner reusables below float on our major tag (@v1) so
 # a scanner change ships without bumping this file; the org .pinact.yml +
@@ -82,7 +84,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      # ok when zizmor exits clean, warn otherwise (warn-only rollout).
+      # ok when zizmor exits clean, warn otherwise. The report job promotes
+      # this to a blocking failure only when the SARIF error count > 0.
       status: ${{ steps.zizmor.outcome == 'success' && 'ok' || 'warn' }}
       # finding counts by severity level (error / warning / notice) from the
       # SARIF count pass, so the summary shows the full breakdown. Computed
@@ -116,9 +119,11 @@ jobs:
           fi
       - name: Run zizmor
         id: zizmor
-        # Warn-only during rollout: the step swallows its own failure so the
-        # job (and the run) still passes, while we capture the outcome above.
-        # Remove continue-on-error to make zizmor findings block the PR.
+        # Keep continue-on-error so this step always emits annotations and the
+        # job exposes the severity counts, regardless of findings. Blocking is
+        # decided by the report job, which fails the suite only on
+        # error-severity findings (warnings/notices stay non-blocking). Do NOT
+        # remove continue-on-error, or warnings/notices would block too.
         continue-on-error: true
         uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
         with:
@@ -235,14 +240,19 @@ jobs:
             ZIZMOR_GLYPH="⚠️"; ZIZMOR_SEV="warn"; ZIZMOR_MSG="Findings (warn-only; see annotations)"
           fi
 
-          # Overall callout. Hard gates (bumblebee/betterleaks/pinact) can
-          # block; zizmor is warn-only (never blocks) but error-severity
-          # findings still escalate the callout so they are not hidden.
+          # Overall callout + gate. Any error-severity condition FAILS the
+          # suite (this job exits 1 at the end): a hard gate
+          # (bumblebee/betterleaks/pinact) that failed or errored, OR a zizmor
+          # error-severity finding. Warnings and notices (incl. warn-only
+          # pinact and zizmor warning/notice findings) never block.
+          SUITE_FAILED=0
           GATES="${SUPPLY_STATUS} ${SECRET_STATUS} ${PIN_STATUS}"
           if printf '%s' "${GATES}" | grep -qwE "fail|error"; then
             CALLOUT="> [!CAUTION]"$'\n'"> A required check did not pass. See the rows above and the workflow run."
+            SUITE_FAILED=1
           elif [ "${ZIZMOR_SEV}" = "error" ]; then
-            CALLOUT="> [!CAUTION]"$'\n'"> zizmor found error-severity issues. They are warn-only (they do not block this PR), but please address them."
+            CALLOUT="> [!CAUTION]"$'\n'"> zizmor found error-severity issues. These block this PR. Fix them, or add a justified ignore to \`zizmor.yml\`."
+            SUITE_FAILED=1
           elif printf '%s' "${GATES}" | grep -qw "warn" || [ "${ZIZMOR_SEV}" = "warn" ]; then
             CALLOUT="> [!WARNING]"$'\n'"> Warnings only. These do not block the PR, but please review them."
           else
@@ -294,4 +304,12 @@ jobs:
             else
               echo "::warning::Could not post the consolidated comment (read-only token on a fork PR?)."
             fi
+          fi
+
+          # Gate LAST, after the comment is posted, so the result is always
+          # visible even when the suite fails. Comment-post failures (fork /
+          # read-only token) are warn-only above and do not affect this.
+          if [ "${SUITE_FAILED}" = "1" ]; then
+            echo "::error::Security Suite: error-severity findings block this PR. See the summary comment and the rows above."
+            exit 1
           fi

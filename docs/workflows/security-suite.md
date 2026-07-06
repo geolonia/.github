@@ -24,6 +24,24 @@ no per-caller bump. The same suite is also offered in the "New workflow" picker
 (`workflow-templates/security-suite.yml`) for repos that opt in manually.
 **Do not enable both on one repo.**
 
+## What blocks a PR
+
+The suite fails (red required check) on **error-severity** findings, and warns
+(does not block) otherwise:
+
+| Check | Blocks the PR when | Warn-only |
+|:--|:--|:--|
+| bumblebee | a supply-chain exposure is matched | - |
+| betterleaks | a secret is found in the PR diff | - |
+| zizmor | an **error-severity** finding (high) | warnings + notices |
+| pinact | (never - warn-only in the suite) | unpinned / mismatched pins |
+
+zizmor's job stays `continue-on-error` so it always emits annotations and the
+error/warning/notice counts; the `report` job is the single gate and exits 1
+only when there is an error-severity finding (or a hard-gate failure). To
+accept a specific zizmor finding, add a justified ignore to `zizmor.yml` rather
+than turning the gate off.
+
 ## ⚠️ The one rule you must not forget: keep `v1` a LIGHTWEIGHT tag
 
 **The `v1` tag must be a lightweight tag (a direct ref to a commit), never an
