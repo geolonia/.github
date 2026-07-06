@@ -30,6 +30,13 @@ locations** in this repo plus a **tag-pinning convention** in callers.
   `CdkDeployMonitor` IAM permission bundle and `models: read` permission
   in the calling workflow + every parent in the call chain.
 - **`sync-team-access`** - keeps GitHub team-to-repo access in sync.
+- **`security-suite`** - consolidated per-PR security gate (bumblebee,
+  betterleaks, pinact, zizmor) posting ONE PR comment. Enforced org-wide as
+  a ruleset "required workflow" pointing at `security-suite.yml@v1`, so
+  targeted repos need NO file of their own. `security-suite.yml` is a thin
+  caller of `reusable-security-suite.yml`, which calls the scanner reusables.
+  **SPECIAL RELEASE RULES apply - see the warning below. Do not just move
+  `v1`.** Full page: `docs/workflows/security-suite.md`.
 
 ## Caller-side conventions
 
@@ -69,6 +76,40 @@ When making **breaking** changes:
 Always keep `workflow-templates/<name>.properties.json` in sync with the
 YAML so the picker shows accurate names/descriptions.
 
+## SPECIAL CASE: the Security Suite required-workflow tree
+
+The "move `v1` forward" flow above is UNSAFE for `security-suite.yml` and the
+reusables it pulls in. Because it is a ruleset **required workflow**, the
+"require workflows" injector runs it ONLY when its ENTIRE reusable tree
+resolves to immutable SHAs:
+
+```
+security-suite.yml  ->  reusable-security-suite.yml@<SHA>
+                          ->  reusable-{bumblebee-scan,secret-leak-check,pinact-check}.yml@<SHA>
+```
+
+A moving tag (`@v1`) ANYWHERE in that tree makes the injector **silently
+produce no run at all** - no check-run, not even a failure - so the required
+"Security Suite" check hangs at "Expected / waiting for workflow to run"
+FOREVER and blocks merge on every consumer PR. (Learned via the v1.27-v1.29
+regression; fixed in #88/#89/#90.) GitHub's docs do not spell this out.
+
+Rules:
+
+- Keep every `uses:` in the tree above SHA-pinned (with a `# vX.Y.Z` comment).
+  Only the picker template `workflow-templates/security-suite.yml` may stay
+  `@v1` (it is a normal, non-injected workflow).
+- Releasing a suite/scanner change takes TWO releases (the SHAs are a
+  caller->callee chain): (1) pin the scanner refs inside
+  `reusable-security-suite.yml` to the latest release SHA, release `vX`;
+  (2) bump `security-suite.yml`'s ref to `vX`'s SHA, release `vY`.
+- `@v1` fast-forwarding is NOT proof it works (the failure is silent). After
+  release, re-trigger a consumer PR (empty commit) and confirm a
+  "Security Suite" run appears on the new head SHA.
+- `geolonia/.github` must NOT be in the ruleset's target repos (it hosts the
+  required workflow; its own PRs would hang the same way). It dogfoods via its
+  local `security-suite.yml` instead.
+
 ## Common troubleshooting
 
 - **`Could not find reusable workflow`** - caller is pinned to a tag that
@@ -79,3 +120,7 @@ YAML so the picker shows accurate names/descriptions.
   repo, or the per-repo `AWS_ACCOUNT_ID` override is set.
 - **CDK deploy monitor doesn't post comments** - needs `contents: write`
   + `models: read` on the **caller's** top-level `permissions:` block.
+- **Security Suite required check stuck at "Expected"** on consumer PRs, with
+  no "Security Suite" run in the Actions tab - a moving `@v1` ref is present
+  somewhere in the required-workflow tree. SHA-pin every `uses:` in the tree
+  (see the SPECIAL CASE section above).
