@@ -8,6 +8,7 @@ under `.github/workflows/`.
 
 | Template | Page |
 | --- | --- |
+| Security Suite (`security-suite.yml`) | [Security Suite](workflows/security-suite.md) |
 | Publish TechDocs (`publish-techdocs.yml`) | [Publish TechDocs](workflows/publish-techdocs.md) |
 | Release on Tag (`release-auto-on-tag.yml`) | [Release on Tag](workflows/release-on-tag.md) |
 | Bumblebee Supply-Chain Scan (`bumblebee-scan.yml`) | [Bumblebee Supply-Chain Scan](workflows/bumblebee-scan.md) |
@@ -30,6 +31,12 @@ repos making use of them can pin a version and avoid breakage from changes on `m
 Pinning to tags prevents breakage in repos making use of them. When a breaking
 change is needed, publish a new tag (e.g., `v2.1.0`) so repositories can upgrade
 on their own schedule.
+
+> **Security Suite gotcha:** `security-suite.yml` is enforced org-wide as a
+> ruleset "required workflow". Its reusable refs may float on `@v1`, but the
+> `v1` **tag itself must be lightweight** (an annotated `v1` makes the required
+> check hang silently on every consumer PR). See
+> [Security Suite](workflows/security-suite.md) before releasing.
 
 ## Updating templates
 

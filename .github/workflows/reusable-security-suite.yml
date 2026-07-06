@@ -34,16 +34,13 @@ name: "[REUSABLE] Security Suite"
 # can observe findings org-wide before blocking. Flip to enforce by removing
 # continue-on-error from the Run zizmor step.
 #
-# Pinning: the sibling scanner reusables below are SHA-pinned, NOT floated on
-# @v1. This reusable sits in the org "required workflow" tree (security-suite.yml
-# -> here -> scanners), and the ruleset "require workflows" injector runs a
-# required workflow ONLY when its ENTIRE reusable tree is immutably pinned; a
-# moving tag anywhere in the tree makes the injector silently produce no run,
-# so the required check hangs at "Expected" forever on every consumer PR (see
-# .github#88 / the v1.27-v1.29 regression). So bump these SHAs on each release.
-# Third-party actions used inside jobs (checkout, zizmor-action) are SHA-pinned
-# as usual. (workflow-templates/security-suite.yml may still use @v1: it is a
-# normal, non-injected workflow where moving tags resolve fine.)
+# Pinning: the sibling scanner reusables below float on our major tag (@v1) so
+# a scanner change ships without bumping this file; the org .pinact.yml +
+# zizmor.yml exempt geolonia/* reusables at a major tag from pinning.
+# Third-party actions used inside jobs (checkout, zizmor-action) stay SHA-pinned.
+# NB: floating reusable refs are fine for the required-workflow tree. The real
+# constraint is that the `v1` tag must be a LIGHTWEIGHT tag (an annotated `v1`
+# breaks the ruleset injector). See docs/workflows/security-suite.md.
 
 on:
   workflow_call:
@@ -57,7 +54,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@0d7d0f2ef99869b08f125c075214994a947de901 # v1.29.0
+    uses: geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml@v1
     with:
       report-mode: summary
 
@@ -65,14 +62,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@0d7d0f2ef99869b08f125c075214994a947de901 # v1.29.0
+    uses: geolonia/.github/.github/workflows/reusable-secret-leak-check.yml@v1
     with:
       report-mode: summary
 
   action-pinning:
     permissions:
       contents: read
-    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@0d7d0f2ef99869b08f125c075214994a947de901 # v1.29.0
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
     with:
       # Warn-only in the suite: an unpinned or comment-mismatched action
       # reports a warning row instead of blocking the PR. (pinact also
