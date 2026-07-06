@@ -49,4 +49,4 @@ jobs:
     # check hang silently at "Expected" on every consumer PR. See
     # docs/workflows/security-suite.md. (org .pinact.yml + zizmor.yml exempt
     # geolonia/* reusables at a major tag from pinning.)
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@v1
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@v1.19.0

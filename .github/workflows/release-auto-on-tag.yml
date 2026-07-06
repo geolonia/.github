@@ -11,7 +11,7 @@ jobs:
       contents: write # create the GitHub release and push/move tags
     # Float on @v1 (this is a normal, non-required workflow) so we pick up the
     # lightweight-tag peel fix and future release-workflow changes automatically.
-    uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@v1
+    uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@v1.19.0
     # Pass only the secrets the reusable declares, not `inherit`.
     secrets:
       WORKFLOWS_CLIENT_ID: ${{ secrets.WORKFLOWS_CLIENT_ID }}

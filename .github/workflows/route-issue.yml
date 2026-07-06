@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   route:
-    uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
+    uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@c98b84680c48cd3d36b160c8e77baffa38913acc # v1.19.0
     # Pass only the dispatch secrets the reusable declares, not
     # `secrets: inherit` (zizmor secrets-inherit).
     secrets:
