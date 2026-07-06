@@ -4,6 +4,7 @@ nav:
   - Community Health: community-health.md
   - Workflows:
       - Overview: workflows.md
+      - Security Suite: workflows/security-suite.md
       - Publish TechDocs: workflows/publish-techdocs.md
       - Release on Tag: workflows/release-on-tag.md
       - Bumblebee Supply-Chain Scan: workflows/bumblebee-scan.md

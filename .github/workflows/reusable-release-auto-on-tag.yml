@@ -160,7 +160,11 @@ jobs:
           MINOR: ${{ steps.semver.outputs.minor }}
           TAG: ${{ steps.semver.outputs.tag }}
         run: |
-          git tag -f "$MINOR" "$TAG"
+          # Peel to the commit ("$TAG^{commit}") so the moved tag is always a
+          # LIGHTWEIGHT tag, even when the release tag is annotated. An
+          # annotated floating tag breaks the ruleset required-workflow
+          # injector (see docs/workflows/security-suite.md).
+          git tag -f "$MINOR" "$TAG^{commit}"
           git push -f origin "$MINOR"
 
       - name: Move/update MAJOR tag (vX)
@@ -170,5 +174,7 @@ jobs:
           MAJOR: ${{ steps.semver.outputs.major }}
           TAG: ${{ steps.semver.outputs.tag }}
         run: |
-          git tag -f "$MAJOR" "$TAG"
+          # Peel to the commit so the moved major tag stays lightweight (see
+          # the MINOR step above and docs/workflows/security-suite.md).
+          git tag -f "$MAJOR" "$TAG^{commit}"
           git push -f origin "$MAJOR"
