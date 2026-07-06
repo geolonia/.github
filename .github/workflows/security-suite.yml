@@ -49,4 +49,4 @@ jobs:
     # fire. The inner scanner refs inside reusable-security-suite.yml stay at
     # @v1 (they resolve fine at runtime); only this top-level required-workflow
     # reference must be pinned. Bump this SHA on each suite release.
-    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@82a98a9b4b4f75f1f064a85a7ebc720bbcc953f5 # v1.28.0
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@76db4b3bd1dca7a263cc82a0837fe6cb1cf2a98e # v1.30.0
