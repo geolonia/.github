@@ -5,10 +5,21 @@ on:
     branches: [main]
     paths: ['catalog-info.yaml']
 
+# Explicit least-privilege ceiling: the reusable only reads catalog-info.yaml
+# and dispatches via an App token, so the caller token needs no more than
+# contents: read (avoids the repo-default token, which zizmor flags as
+# excessive-permissions).
+permissions:
+  contents: read
+
 jobs:
   sync:
     uses: geolonia/.github/.github/workflows/reusable-sync-team-access.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
-    secrets: inherit
+    # Pass only the dispatch secrets the reusable declares, not
+    # `secrets: inherit` (zizmor secrets-inherit).
+    secrets:
+      OPS_DISPATCH_CLIENT_ID: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+      OPS_DISPATCH_APP_PRIVATE_KEY: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
     # Optional settings (uncomment to override defaults):
     # with:
     #   dispatch_repo: geolonia/geolonia-operations
