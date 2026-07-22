@@ -9,7 +9,7 @@ jobs:
   publish:
     permissions:
       contents: write # create the GitHub release and push/move tags
-    uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@92c8c6d56730650205ca4be5c7bdba72245d304f # v1.16.0
+    uses: geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml@236b83cfe566aa7eedf62f66c0f54078d0556294 # v1.35.0
     # Pass only the secrets the reusable declares, not `inherit`.
     secrets:
       WORKFLOWS_CLIENT_ID: ${{ secrets.WORKFLOWS_CLIENT_ID }}
