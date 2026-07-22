@@ -1,0 +1,100 @@
+name: Sync workflow-template pins
+
+# Keep the reusable-workflow SHA pins inside workflow-templates/*.yml aligned
+# with the latest geolonia/.github release.
+#
+# Why a dedicated job: Dependabot only scans .github/workflows, so it never
+# bumps the geolonia/.github reusable pins living under workflow-templates/.
+# Those templates SHA-pin the reusables (the org standard), so this periodic
+# job rewrites the SHA pins to the latest release and opens a PR when they
+# drift; the PR goes through the normal review + Security Suite gate (no direct
+# push to main). Created via the Workflows GitHub App token so PR checks run.
+#
+# Note: workflow-templates/security-suite.yml deliberately floats its reusable
+# on @v1 (it is the ruleset-required workflow, which the org ruleset pins to the
+# v1 tag). The rewrite below only matches SHA pins, so that @v1 ref is left
+# untouched by design.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # weekly, Monday 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-pins:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # push + PR happen via the app token, not GITHUB_TOKEN
+    steps:
+      - name: Mint app token
+        id: app_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.WORKFLOWS_CLIENT_ID }}
+          private-key: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
+          # Least privilege: scope the token to exactly what this job needs
+          # (push the sync branch + open the PR), not the app's blanket
+          # installation permissions (zizmor: dangerous-github-app-token).
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # need tags to resolve the latest release SHA
+
+      - name: Rewrite reusable pins to the latest release
+        id: rewrite
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob # no templates -> empty loop, not a literal glob
+          LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
+          RELEASE_SHA="$(git rev-list -n 1 "refs/tags/${LATEST_TAG}")"
+          export LATEST_TAG RELEASE_SHA
+          # Rewrite `geolonia/.github/.github/workflows/reusable-*.yml@<sha> # vX.Y.Z`
+          # to the latest release SHA + tag. Only geolonia/.github reusables that
+          # are SHA-pinned are touched; third-party action pins are left to
+          # Dependabot, and any deliberately floating @v1 ref is not matched.
+          for f in workflow-templates/*.yml; do
+            perl -i -pe \
+              's{(geolonia/\.github/\.github/workflows/reusable-[a-z0-9-]+\.yml\@)[0-9a-f]{7,40}(\s+#\s*)v[0-9]+\.[0-9]+\.[0-9]+}{$1 . $ENV{RELEASE_SHA} . $2 . $ENV{LATEST_TAG}}ge' \
+              "$f"
+          done
+          if git diff --quiet -- workflow-templates; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "latest_tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: steps.rewrite.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          LATEST_TAG: ${{ steps.rewrite.outputs.latest_tag }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/sync-workflow-template-pins-${LATEST_TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${BRANCH}"
+          git add workflow-templates
+          git commit -m "chore: sync workflow-template reusable pins to ${LATEST_TAG}"
+          # Authenticate origin once (checkout ran with persist-credentials:
+          # false), then push via origin with force-with-lease so a concurrent
+          # update to the branch is not silently clobbered.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force-with-lease origin "HEAD:${BRANCH}"
+          if gh pr view "${BRANCH}" --json number >/dev/null 2>&1; then
+            echo "PR already open for ${BRANCH}; updated the branch."
+          else
+            gh pr create --base main --head "${BRANCH}" \
+              --title "chore: sync workflow-template pins to ${LATEST_TAG}" \
+              --body "Automated by the Sync workflow-template pins job. Aligns the SHA-pinned geolonia/.github reusable refs in workflow-templates/*.yml with the latest release (${LATEST_TAG}). Dependabot does not scan workflow-templates/, so this periodic PR keeps them current."
+          fi
