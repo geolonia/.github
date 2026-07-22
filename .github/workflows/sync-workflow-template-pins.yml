@@ -30,6 +30,11 @@ jobs:
         with:
           client-id: ${{ secrets.WORKFLOWS_CLIENT_ID }}
           private-key: ${{ secrets.WORKFLOWS_APP_PRIVATE_KEY }}
+          # Least privilege: scope the token to exactly what this job needs
+          # (push the sync branch + open the PR), not the app's blanket
+          # installation permissions (zizmor: dangerous-github-app-token).
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
