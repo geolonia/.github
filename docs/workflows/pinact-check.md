@@ -29,21 +29,11 @@ jobs:
     uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
 ```
 
-## Required files
+## Configuration files
 
-Two files at the repo root, both copyable from `geolonia/.github`:
+One file is required in the repo; the other is optional:
 
-1. **`.pinact.yml`** (copy the repo-root
-   [`.pinact.yml`](https://github.com/geolonia/.github/blob/main/.pinact.yml);
-   optional, since this check fetches it as the fallback when absent): sets the
-   minimum release age (org default: 7 days, `min_age.value: 7`, `always: true`).
-   This is the GitHub Actions analog of pnpm's `minimumReleaseAge`: a new
-   tag is not adopted until it has survived a week, the window when a
-   hijacked-tag attack is most likely to still be live. The canonical
-   file exempts `geolonia/*` from the cooldown (we author our own
-   releases; the window guards against third-party tag hijacks) and is
-   still SHA-pinned.
-2. **`.github/dependabot.yml`** (copy `pinact/dependabot.yml`) with a
+1. **`.github/dependabot.yml`** (required, copy `pinact/dependabot.yml`) with a
    `github-actions` ecosystem entry,
    `cooldown: { default-days: 8 }`, and a `groups` block batching
    minor/patch bumps into one PR while majors arrive individually.
@@ -52,7 +42,19 @@ Two files at the repo root, both copyable from `geolonia/.github`:
    `min_age` of 7: Dependabot counts whole calendar days while pinact
    enforces an exact 168h floor, so an 8-day cooldown guarantees a
    Dependabot PR always clears the Action Pinning Check on arrival
-   instead of failing it for a few hours at the day boundary.
+   instead of failing it for a few hours at the day boundary. Dependabot
+   only reads this file in-repo, so it cannot come from the check's fallback.
+2. **`.pinact.yml`** (optional, copy the repo-root
+   [`.pinact.yml`](https://github.com/geolonia/.github/blob/main/.pinact.yml)):
+   sets the minimum release age (org default: 7 days, `min_age.value: 7`,
+   `always: true`). This check fetches the same canonical file as its fallback
+   when your repo has none, so commit a local copy only to pin an override.
+   It is the GitHub Actions analog of pnpm's `minimumReleaseAge`: a new
+   tag is not adopted until it has survived a week, the window when a
+   hijacked-tag attack is most likely to still be live. The canonical
+   file exempts `geolonia/*` from the cooldown (we author our own
+   releases; the window guards against third-party tag hijacks) and is
+   still SHA-pinned.
 
 ## Check inputs
 
@@ -70,7 +72,8 @@ from `geolonia/.github` to `.pre-commit-config.yaml`, install pinact
 
 ## Enabling the check
 
-1. Copy `.pinact.yml` and the Dependabot config (see "Required files" above).
+1. Add `.github/dependabot.yml` (required); optionally add `.pinact.yml` (see
+   "Configuration files" above).
 2. Open the repo on GitHub and go to **Actions -> New workflow**. Under
    **By Geolonia**, pick **Action Pinning Check** and **Configure**.
 3. Run `pinact run` once locally (or let the pre-commit hook do it) to

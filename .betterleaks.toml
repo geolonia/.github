@@ -5,7 +5,8 @@
 #   * Per-PR secret-leak gate (reusable-secret-leak-check.yml): fetched as the
 #     centralized fallback when a caller repo ships no .betterleaks.toml. Every
 #     detector stays on (useDefault = true); the allowlist below only removes
-#     documented, safe-by-design false positives.
+#     universal, non-secret false-positive patterns (doc placeholders and
+#     generated build artifacts).
 #   * Weekly org-wide audit (geolonia-operations/secret-leak-audit.yml): extends
 #     THIS file and additionally disables generic-api-key, which is dominated by
 #     history noise across full-history scans. That is a one-line delta, not a
@@ -13,23 +14,23 @@
 #   * A repo overrides everything by committing its own .betterleaks.toml.
 #
 # Editing rules:
-#   * Keep useDefault = true. Only ADD allowlist entries for values that are
-#     safe by design (public, client-side) or unmistakable documentation
-#     placeholders. Never allowlist a real secret; rotate and remove it instead.
+#   * Keep useDefault = true. This file holds ONLY universal, non-secret
+#     false-positive patterns: unmistakable documentation placeholders and
+#     generated build artifacts. Never allowlist a real secret; rotate and
+#     remove it instead.
+#   * Do NOT add project-specific token exceptions here, not even public,
+#     client-side tokens (for example a Mapbox pk. token). Those are a
+#     repo-level decision: the owning repo commits its own .betterleaks.toml so
+#     its maintainers own the exception and it is not granted org-wide. This
+#     file is public, so an org-wide token exception would also expose that
+#     decision (and often the value) to everyone.
 #   * Allowlists match against the captured Secret value unless regexTarget is
-#     set, so a regex should describe just the literal placeholder / token.
-#   * This file is public.
+#     set, so a regex should describe just the literal placeholder.
 
 title = "Geolonia organization betterleaks baseline"
 
 [extend]
 useDefault = true
-
-[[allowlists]]
-description = "Mapbox public (pk.) access tokens are client-side by design and safe to commit. Secret (sk.) tokens are NOT covered here and still fail the check."
-regexes = [
-  '''pk\.eyJ[0-9A-Za-z_-]+\.[0-9A-Za-z_-]+''',
-]
 
 [[allowlists]]
 description = "YOUR_API_KEY / YOUR-API-KEY / YOUR_TOKEN family (API docs templates)"
