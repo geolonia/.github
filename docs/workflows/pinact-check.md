@@ -33,8 +33,10 @@ jobs:
 
 Two files at the repo root, both copyable from `geolonia/.github`:
 
-1. **`.pinact.yml`** (copy `pinact/.pinact.yml`): sets the minimum
-   release age (org default: 7 days, `min_age.value: 7`, `always: true`).
+1. **`.pinact.yml`** (copy the repo-root
+   [`.pinact.yml`](https://github.com/geolonia/.github/blob/main/.pinact.yml);
+   optional, since this check fetches it as the fallback when absent): sets the
+   minimum release age (org default: 7 days, `min_age.value: 7`, `always: true`).
    This is the GitHub Actions analog of pnpm's `minimumReleaseAge`: a new
    tag is not adopted until it has survived a week, the window when a
    hijacked-tag attack is most likely to still be live. The canonical

@@ -46,11 +46,15 @@ floor, so the extra day guarantees Dependabot PRs pass the check on arrival.
 New repos created from the Backstage scaffolder get everything below out of the
 box. For an existing repo:
 
-1. Copy the canonical config from this repository's
-   [`pinact/`](https://github.com/geolonia/.github/tree/main/pinact) directory:
-   - `pinact/.pinact.yml` to your repo root as `.pinact.yml`
-   - `pinact/dependabot.yml` to `.github/dependabot.yml` (merge the
-     `github-actions` entry if you already have one)
+1. Copy the canonical files from this repository:
+   - the repo-root
+     [`.pinact.yml`](https://github.com/geolonia/.github/blob/main/.pinact.yml)
+     to your repo root as `.pinact.yml`. This is optional: the Action Pinning
+     Check fetches this same file as its fallback when your repo has none, so
+     copy it only if you want to pin a local override.
+   - [`pinact/dependabot.yml`](https://github.com/geolonia/.github/blob/main/pinact/dependabot.yml)
+     to `.github/dependabot.yml` (merge the `github-actions` entry if you
+     already have one). This one is required: Dependabot only reads it in-repo.
    - optional: `pinact/.pre-commit-config.example.yaml` to your repo root as
      `.pre-commit-config.yaml` (auto-pins on every commit)
 2. Add the **Action Pinning Check** workflow, either way:
@@ -75,7 +79,9 @@ box. For an existing repo:
 ## See also
 
 - [Action Pinning Check reusable workflow](workflows/pinact-check.md)
-- Canonical config to copy:
+- Canonical config: the repo-root
+  [`.pinact.yml`](https://github.com/geolonia/.github/blob/main/.pinact.yml),
+  fetched as the Action Pinning Check fallback. Per-repo helpers live in
   [`pinact/`](https://github.com/geolonia/.github/tree/main/pinact)
-  (`.pinact.yml`, `dependabot.yml`, `.pre-commit-config.example.yaml`).
+  (`dependabot.yml`, `.pre-commit-config.example.yaml`).
 - [pinact](https://github.com/suzuki-shunsuke/pinact) upstream documentation.
