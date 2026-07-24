@@ -1,0 +1,101 @@
+# Canonical org-wide betterleaks config for the Security Suite. SINGLE SOURCE
+# OF TRUTH: this is the one betterleaks ruleset the org maintains.
+#
+# How it is used:
+#   * Per-PR secret-leak gate (reusable-secret-leak-check.yml): fetched as the
+#     centralized fallback when a caller repo ships no .betterleaks.toml. Every
+#     detector stays on (useDefault = true); the allowlist below only removes
+#     universal, non-secret false-positive patterns (doc placeholders and
+#     generated build artifacts).
+#   * Weekly org-wide audit (geolonia-operations/secret-leak-audit.yml): extends
+#     THIS file and additionally disables generic-api-key, which is dominated by
+#     history noise across full-history scans. That is a one-line delta, not a
+#     separate ruleset, so the rules and allowlist live here only.
+#   * A repo overrides everything by committing its own .betterleaks.toml.
+#
+# Editing rules:
+#   * Keep useDefault = true. This file holds ONLY universal, non-secret
+#     false-positive patterns: unmistakable documentation placeholders and
+#     generated build artifacts. Never allowlist a real secret; rotate and
+#     remove it instead.
+#   * Do NOT add project-specific token exceptions here, not even public,
+#     client-side tokens (for example a Mapbox pk. token). Those are a
+#     repo-level decision: the owning repo commits its own .betterleaks.toml so
+#     its maintainers own the exception and it is not granted org-wide. This
+#     file is public, so an org-wide token exception would also expose that
+#     decision (and often the value) to everyone.
+#   * Allowlists match against the captured Secret value unless regexTarget is
+#     set, so a regex should describe just the literal placeholder.
+
+title = "Geolonia organization betterleaks baseline"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "YOUR_API_KEY / YOUR-API-KEY / YOUR_TOKEN family (API docs templates)"
+regexes = [
+  '''(?i)\bYOUR[-_](API[-_]?KEY|TOKEN|SECRET|CLIENT[-_]?(ID|SECRET))\b''',
+]
+
+[[allowlists]]
+description = "Angle-bracket placeholders: <your-token>, <api-key>, <endpoint-url> (incl. Japanese)"
+regexes = [
+  # Inner-char ranges: ASCII letter | Hiragana | Katakana | CJK Unified Ideographs
+  '''<[A-Za-z\x{3040}-\x{309F}\x{30A0}-\x{30FF}\x{4E00}-\x{9FFF}][^>]{1,60}>''',
+]
+
+[[allowlists]]
+description = "Famous example UUIDs used in API docs"
+regexes = [
+  '''(?i)550e8400-e29b-41d4-a716-446655440000''',
+  '''00000000-0000-0000-0000-000000000000''',
+  '''(?i)deadbeef-dead-beef-dead-beefdeadbeef''',
+]
+
+[[allowlists]]
+description = "Standard placeholder words: REPLACE_ME / EXAMPLE / PLACEHOLDER / CHANGEME"
+regexes = [
+  '''(?i)\b(REPLACE[-_]?ME|CHANGE[-_]?ME|PLACEHOLDER|EXAMPLE[-_]?(KEY|TOKEN|SECRET)?|FAKE[-_]?(KEY|TOKEN|SECRET)?|SAMPLE[-_]?(KEY|TOKEN|SECRET)?)\b''',
+]
+
+[[allowlists]]
+description = "Obvious dev / test scaffold tokens (must include credential context)"
+regexes = [
+  '''(?i)\bdev[-_]?local[-_]?token[-_]?please[-_]?change\b''',
+  '''(?i)\b(test|sample|dummy|dev|stub)[-_]?(token|key|secret|password)[-_]?(here|value)?\b''',
+]
+
+[[allowlists]]
+description = "Truncated JWT placeholder in docs (eyJ... ending in literal '...' ellipsis)"
+regexes = [
+  # Matches the docs convention of showing a JWT prefix followed by a
+  # literal three-dot ellipsis. Real JWTs are never written that way.
+  '''eyJ[A-Za-z0-9_\-]{8,}\.\.\.''',
+]
+
+[[allowlists]]
+description = "Basic-auth label pair literal: client_id:client_secret"
+regexes = [
+  # Appears in OAuth docs and test fixtures across the org as the
+  # `-u "client_id:client_secret"` curl flag or
+  # `Buffer.from('client-id:client-secret').toString('base64')` in
+  # tests. Real Basic-auth credentials are never the words themselves.
+  '''(?i)\bclient[-_]id:client[-_]secret\b''',
+]
+
+[[allowlists]]
+description = "Minified bundles, source maps, and webpack bundle-stats output"
+paths = [
+  # Content hashes inside generated build output get flagged as
+  # high-entropy tokens (sourcegraph-access-token in particular fires
+  # on 40-char hex SHA1s, which is exactly what webpack emits as
+  # content-addressing identifiers). We never hand-edit these files,
+  # so anything they contain is by definition not a hand-typed
+  # credential.
+  '''\.min\.js$''',
+  '''\.min\.js\.map$''',
+  '''\.min\.css$''',
+  '''\.min\.css\.map$''',
+  '''(?:^|/)bundle-stats\.json$''',
+]
