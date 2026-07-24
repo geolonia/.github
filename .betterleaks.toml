@@ -1,0 +1,27 @@
+# Organization-wide betterleaks baseline for the Security Suite secret-leak
+# gate (reusable-secret-leak-check.yml).
+#
+# How this file is used:
+#   * A repo that ships its own .betterleaks.toml overrides this file entirely.
+#   * A repo with no config inherits this baseline via the reusable workflow's
+#     centralized-config fallback (config-repo / config-ref inputs).
+#
+# Editing rules:
+#   * Keep every default detector on (useDefault = true).
+#   * Only ADD allowlist entries for values that are safe by design, such as
+#     public, client-side tokens. Scope each entry as narrowly as possible.
+#   * Never allowlist a real secret here. Rotate it and remove it from source
+#     instead. This baseline is public.
+
+title = "Geolonia organization betterleaks baseline"
+
+[extend]
+# Start from betterleaks' built-in ruleset so every detector stays active.
+useDefault = true
+
+[allowlist]
+description = "Mapbox public (pk.) access tokens are client-side by design and safe to commit. Secret (sk.) tokens are NOT covered here and still fail the check."
+regexTarget = "match"
+regexes = [
+  '''pk\.eyJ[0-9A-Za-z_-]+\.[0-9A-Za-z_-]+''',
+]
