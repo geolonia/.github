@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   sync:
-    uses: geolonia/.github/.github/workflows/reusable-sync-team-access.yml@236b83cfe566aa7eedf62f66c0f54078d0556294 # v1.35.0
+    uses: geolonia/.github/.github/workflows/reusable-sync-team-access.yml@82fb51be9f5a20f4e75762bb0cabcfab9ff20a21 # v1.36.0
     # Pass only the dispatch secrets the reusable declares, not
     # `secrets: inherit` (zizmor secrets-inherit).
     secrets:
