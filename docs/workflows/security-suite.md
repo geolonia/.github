@@ -105,6 +105,30 @@ gh api "repos/geolonia/<repo>/actions/runs?head_sha=<head>" \
 If you see only the repo's own CI and no "Security Suite" run, **check the `v1`
 tag type first** - it is almost always an annotated `v1`.
 
+## Ref creation is exempt, and must stay exempt
+
+The ruleset's workflow rule has **"Do not enforce on creation" enabled**
+(`do_not_enforce_on_create: true` over the REST API). Leave it enabled.
+
+A repository is enrolled by its `security-suite=true` custom property, and that
+property can be set when the repository is created, before it has any commits.
+The first push is the one that creates the default branch, so with the flag off
+the rule is evaluated against a required workflow run that cannot exist yet:
+no branch, no PR, nothing to run. GitHub declines the push with "push declined
+due to repository rule violations", and automated repository provisioning fails
+outright with an empty repo.
+
+The exemption covers the ref creation event only. Every later push and pull
+request to the default branch of an enrolled repo still requires the suite to
+pass, and the ruleset keeps an empty bypass list.
+
+Read the current value with:
+
+```bash
+gh api /orgs/geolonia/rulesets/<ruleset_id> \
+  --jq '.rules[] | select(.type=="workflows") | .parameters.do_not_enforce_on_create'
+```
+
 ## geolonia/.github is not a ruleset target
 
 The repo that **hosts** the required workflow must **not** also be in the
