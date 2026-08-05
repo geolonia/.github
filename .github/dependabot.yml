@@ -16,6 +16,27 @@ updates:
     # check).
     cooldown:
       default-days: 8
+    # This repo references some of its OWN reusables at a bare major tag
+    # (@v1) on purpose: a vX.Y.Z release fast-forwards v1, so the security
+    # suite and the release workflow ship a change in one release instead of
+    # a caller-bump-per-release treadmill. See docs/workflows/security-suite.md
+    # and the matching exemptions in .pinact.yml / zizmor.yml.
+    #
+    # Dependabot does not know that and "upgrades" @v1 to @vX.Y.Z (PR #112),
+    # which breaks the single-release model AND silently loses the .pinact.yml
+    # exemption, because that rule only matches a bare major tag
+    # (ActionVersion "^v[0-9]+$") — so pinact then demands a SHA pin.
+    #
+    # Ignore exactly the reusables referenced at @v1. Listed individually, not
+    # as geolonia/.github/*, because this repo also SHA-pins two of its own
+    # reusables as a consumer would (publish-techdocs.yml, route-issue.yml);
+    # those must keep getting SHA bumps.
+    ignore:
+      - dependency-name: "geolonia/.github/.github/workflows/reusable-security-suite.yml"
+      - dependency-name: "geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml"
+      - dependency-name: "geolonia/.github/.github/workflows/reusable-secret-leak-check.yml"
+      - dependency-name: "geolonia/.github/.github/workflows/reusable-pinact-check.yml"
+      - dependency-name: "geolonia/.github/.github/workflows/reusable-release-auto-on-tag.yml"
     groups:
       # Batch minor and patch bumps into a single weekly PR. Majors are
       # excluded here, so breaking upgrades arrive as individual PRs that
