@@ -48,8 +48,9 @@ jobs:
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@v1
 ```
 
-When a reusable declares secrets, pass exactly those — never `secrets: inherit`
-(zizmor secrets-inherit):
+When a reusable declares secrets, pass exactly the ones its `workflow_call`
+contract declares — never `secrets: inherit` (zizmor secrets-inherit). For
+example, `reusable-route-issue.yml` declares the two dispatch secrets:
 
 ```yaml
     secrets:
