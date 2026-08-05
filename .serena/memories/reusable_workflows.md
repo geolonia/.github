@@ -46,7 +46,15 @@ Consumers should pin to a tag, not a SHA, not `@main`:
 jobs:
   publish:
     uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@v1
-    secrets: inherit
+```
+
+When a reusable declares secrets, pass exactly those — never `secrets: inherit`
+(zizmor secrets-inherit):
+
+```yaml
+    secrets:
+      OPS_DISPATCH_CLIENT_ID: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+      OPS_DISPATCH_APP_PRIVATE_KEY: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
 ```
 
 ## Updating a reusable workflow

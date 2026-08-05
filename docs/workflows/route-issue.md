@@ -20,7 +20,11 @@ permissions:
 jobs:
   route:
     uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
-    secrets: inherit
+    # Pass only the dispatch secrets the reusable declares, not
+    # `secrets: inherit` (zizmor secrets-inherit).
+    secrets:
+      OPS_DISPATCH_CLIENT_ID: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+      OPS_DISPATCH_APP_PRIVATE_KEY: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
 ```
 
 ## Options
@@ -33,7 +37,9 @@ jobs:
 jobs:
   route:
     uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
-    secrets: inherit
+    secrets:
+      OPS_DISPATCH_CLIENT_ID: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+      OPS_DISPATCH_APP_PRIVATE_KEY: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
     with:
       exclusive_routing: false   # add only, never remove
 ```

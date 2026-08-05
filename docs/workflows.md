@@ -77,9 +77,10 @@ From the UI: **Actions → select the workflow → Run workflow**.
 
 - Confirm the secret is set under **Settings → Secrets and variables → Actions**
   in the calling repository.
-- Reusable workflows called with `secrets: inherit` receive all secrets from the
-  caller. If a secret is set at the org level, the calling repo must have access
-  to it (check org secret visibility).
+- Callers pass secrets explicitly (`secrets:` mapping, not `secrets: inherit`),
+  so check the caller forwards the secret the reusable declares. If a secret is
+  set at the org level, the calling repo must have access to it (check org
+  secret visibility).
 - For workflows that override `AWS_ACCOUNT_ID`, make sure the repo-level secret
   name matches exactly (it is case-sensitive).
 

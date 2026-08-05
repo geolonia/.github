@@ -26,7 +26,11 @@ name: "[REUSABLE] Route issue to team board"
 #   jobs:
 #     route:
 #       uses: geolonia/.github/.github/workflows/reusable-route-issue.yml@v1
-#       secrets: inherit
+#       # Pass only the dispatch secrets this workflow declares, not
+#       # `secrets: inherit` (zizmor secrets-inherit).
+#       secrets:
+#         OPS_DISPATCH_CLIENT_ID: ${{ secrets.OPS_DISPATCH_CLIENT_ID }}
+#         OPS_DISPATCH_APP_PRIVATE_KEY: ${{ secrets.OPS_DISPATCH_APP_PRIVATE_KEY }}
 #
 # Requires the org-level dispatch secrets (already used by sync-team-access) to
 # be visible to the calling repo:
