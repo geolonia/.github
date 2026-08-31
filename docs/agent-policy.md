@@ -41,15 +41,27 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 
 ## Code reviews
 
-- After opening a PR, CodeRabbit will post an automated review within a few minutes.
-  Wait for it before asking a human reviewer for approval.
+- After opening a PR, CodeRabbit posts an automated review within a few minutes.
 - Address all CodeRabbit comments. Resolve each thread after applying the fix
   (or leave a reply explaining why the suggestion was declined).
+- Human approval is not required by default. CodeRabbit approves the PR once every
+  comment it raised is resolved and it has reviewed the latest commit, and that
+  approval satisfies the required review.
 - Do not merge until:
   1. All CI checks pass.
-  2. All CodeRabbit blocking comments are resolved.
-  3. At least one human reviewer has approved.
+  2. All CodeRabbit comments are resolved.
+  3. The PR has an approving review.
+- Request a human reviewer whenever the change deserves human judgement, for
+  example security sensitive work, infrastructure, or anything hard to reverse.
+  Some changes still require one: a PR touching a path listed in `CODEOWNERS`
+  needs an approval from the owning team no matter what CodeRabbit says.
 - Address human reviewer feedback promptly and resolve threads when the change is applied.
+
+Two cases produce no CodeRabbit review at all, and therefore no approval:
+
+- **Draft PRs.** Mark the PR ready for review to get one.
+- **PRs based on another feature branch.** CodeRabbit only reviews PRs that target
+  the default branch. Retarget the PR, or ask a human to review it.
 
 ## Team communication
 
