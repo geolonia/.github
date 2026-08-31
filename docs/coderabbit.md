@@ -40,7 +40,8 @@ CodeRabbit documents it as not recommended, so prefer the repository form above.
 the one that surprises people. A pull request that adds or edits `.coderabbit.yaml`
 is still reviewed with the configuration that was already on the base branch, so a
 configuration change never affects its own pull request. Enrolling a repository
-takes effect on the next pull request opened after the enrolling one merges.
+takes effect on the next review after the enrolling pull request merges, which
+includes the next review of a pull request that was already open at the time.
 
 CodeRabbit's own documentation describes the opposite, saying the configuration on
 the branch under review is used. Our observations contradict it: three
