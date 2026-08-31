@@ -20,30 +20,20 @@ That is the whole setup. Repositories created through the Backstage
 
 ## Extend it
 
-You cannot, for now. A repository either uses the shared settings as they are, or
-replaces them.
+Not possible today. Take the shared settings as they are, or replace them.
 
-Two things that look like they should work, and do not:
+Adding your own keys next to `remote_config` does nothing. Adding
+`inheritance: true` is worse: it throws the shared settings away without telling
+you, and CodeRabbit stops approving pull requests in that repository.
 
-- Adding keys next to `remote_config`. They are ignored.
-- Adding `inheritance: true` as well. This is worse: the shared settings are
-  dropped entirely and only your own keys survive, merged with the organization
-  defaults. In particular `request_changes_workflow` reverts to `false`, so
-  CodeRabbit stops approving pull requests in that repository and every pull
-  request needs a human approver again. It fails silently.
-
-If you need a setting changed, open a pull request against the shared file so
-everyone gets it, or replace the configuration outright as below.
+If you want a setting changed, change it in the shared file so everyone gets it.
 
 ## Replace it
 
-To opt out entirely, delete the `remote_config` block and write a full
-configuration for your repository. See the
-[CodeRabbit configuration reference](https://docs.coderabbit.ai/reference/yaml-template).
-
-If you do this, your repository no longer gets shared settings, including the one
-that lets CodeRabbit approve pull requests. Set `reviews.request_changes_workflow:
-true` yourself, or every pull request there will need a human approver.
+Delete everything in `.coderabbit.yaml` and write your own, using the
+[CodeRabbit reference](https://docs.coderabbit.ai/reference/yaml-template). Include
+`reviews.request_changes_workflow: true`, or CodeRabbit will not approve pull
+requests and every one will need a human approver.
 
 ## Good to know
 
