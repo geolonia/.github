@@ -10,6 +10,7 @@ keep organization-wide defaults in one place and reduce duplication across proje
 - Issue and pull request templates
 - Workflow templates for publishing TechDocs and shipping tagged releases
 - Organization-wide agent policy for AI tools operating in Geolonia repos
+- The shared CodeRabbit configuration every repository reads at review time
 
 **Note**: This repo is named `.github` to leverage GitHub's special handling of
 this repository and **it must remain public**. Take care not to include any sensitive
@@ -24,5 +25,6 @@ Geolonia repositories.
 
 - [Community health](community-health.md)
 - [Reusable workflows](workflows.md)
+- [Shared CodeRabbit configuration](coderabbit.md)
 - [Pinning GitHub Actions](github-actions-pinning.md)
 - [Organization profile](profile.md)
