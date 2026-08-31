@@ -28,9 +28,10 @@ setup.
 ## Three consequences worth knowing
 
 **The pointer is resolved at review time, against `main`.** Merging a change to
-the shared file changes review behavior everywhere on the next pull request
-opened. No per-repository bump is needed, and there is no staged rollout. Revert
-the change to roll back.
+the shared file changes review behavior everywhere on the next CodeRabbit review,
+including the next review of a pull request that is already open. No
+per-repository bump is needed, and there is no staged rollout. Revert the change
+to roll back.
 
 **It is a whole file replacement, not a merge.** Any key sitting next to
 `remote_config` in a repository's local file is ignored without warning. So
