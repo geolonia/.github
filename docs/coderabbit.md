@@ -25,7 +25,10 @@ At review time CodeRabbit reads the repository's own file, sees `remote_config`,
 fetches the referenced file, and uses it as the configuration.
 
 To enrol a new repository, add those four lines to its root. That is the whole
-setup.
+setup. The canonical copy lives at
+[`coderabbit/pointer.yaml`](https://github.com/geolonia/.github/blob/main/coderabbit/pointer.yaml)
+in this repo, and the Backstage `create-repository` template fetches it, so
+repositories created through the scaffolder are enrolled from the start.
 
 There is also a URL form, pointing at the `raw.githubusercontent.com` address of
 the same file. It works, and every Geolonia repository used it until recently, but
