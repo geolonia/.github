@@ -1,18 +1,12 @@
 # Shared CodeRabbit Configuration
 
-CodeRabbit reviews pull requests across Geolonia repositories. Every repository
-draws its review settings from a single file in this repo:
+CodeRabbit reviews pull requests across Geolonia repositories. The shared review
+settings live in one file in this repo:
 [`.coderabbit.yaml`](https://github.com/geolonia/.github/blob/main/.coderabbit.yaml).
 
-## How a repository picks it up
+## Use the shared settings
 
-This is **not** GitHub's community health fallback. That mechanism only covers
-files like `CODE_OF_CONDUCT.md` and the issue templates, and CodeRabbit does not
-take part in it. Placing `.coderabbit.yaml` in this repo has no effect on another
-repository by itself.
-
-Sharing works through a CodeRabbit feature called `remote_config`. Each repository
-keeps a real `.coderabbit.yaml` at its own root, containing only a pointer:
+Put this in `.coderabbit.yaml` at the root of your repository:
 
 ```yaml
 remote_config:
@@ -21,107 +15,42 @@ remote_config:
   path: .coderabbit.yaml
 ```
 
-At review time CodeRabbit reads the repository's own file, sees `remote_config`,
-fetches the referenced file, and uses it as the configuration.
+That is the whole setup. Repositories created through the Backstage
+`create-repository` template already have it.
 
-To enrol a new repository, add those four lines to its root. That is the whole
-setup. The canonical copy lives at
-[`coderabbit/pointer.yaml`](https://github.com/geolonia/.github/blob/main/coderabbit/pointer.yaml)
-in this repo, and the Backstage `create-repository` template fetches it, so
-repositories created through the scaffolder are enrolled from the start.
+## Extend it
 
-There is also a URL form, pointing at the `raw.githubusercontent.com` address of
-the same file. It works, and every Geolonia repository used it until recently, but
-CodeRabbit documents it as not recommended, so prefer the repository form above.
+To keep the shared settings and add your own on top, set `inheritance: true` and
+list only what you want to change:
 
-## Four consequences worth knowing
+```yaml
+inheritance: true
+remote_config:
+  repository: geolonia/.github
+  ref: main
+  path: .coderabbit.yaml
+reviews:
+  profile: chill
+  path_filters:
+    - "!vendor/**"
+```
 
-**Reviews use the configuration on the base branch, not the head branch.** This is
-the one that surprises people. A pull request that adds or edits `.coderabbit.yaml`
-is still reviewed with the configuration that was already on the base branch, so a
-configuration change never affects its own pull request. Enrolling a repository
-takes effect on the next review after the enrolling pull request merges, which
-includes the next review of a pull request that was already open at the time.
+Without `inheritance: true`, any keys you add next to `remote_config` are ignored.
 
-CodeRabbit's own documentation describes the opposite, saying the configuration on
-the branch under review is used. Our observations contradict it: three
-same-repository pull requests that carried a changed or added configuration on the
-head branch were each reviewed on the base branch configuration instead. Fork pull
-requests were not tested, so treat the rule above as describing same-repository
-pull requests.
+## Replace it
 
-Be careful with `@coderabbitai configuration` here. It is the right tool for
-auditing which configuration a pointer resolves to, and it does read the head
-branch, but that means its answer can differ from what the review actually used.
-Use it to check that a pointer resolves, not to prove what a review ran on.
+To opt out entirely, delete the `remote_config` block and write a full
+configuration for your repository. See the
+[CodeRabbit configuration reference](https://docs.coderabbit.ai/reference/yaml-template).
 
-**The pointer is resolved at review time, against `main`.** Merging a change to
-the shared file changes review behavior everywhere on the next CodeRabbit review,
-including the next review of a pull request that is already open. No
-per-repository bump is needed, and there is no staged rollout. Revert the change
-to roll back.
+## Good to know
 
-**By default it is a whole file replacement, not a merge.** `inheritance` defaults
-to `false`, which means CodeRabbit stops at the first configuration source it
-finds. Any key sitting next to `remote_config` in a repository's local file is
-ignored without warning, so pasting a configuration snippet into a repository root
-does not add a setting on top of the shared config, it detaches that repository
-from the shared config entirely and silently. Setting `inheritance: true` changes
-this and merges values from parent levels instead, which is the supported way for a
-repository to extend the shared config rather than replace it. Either way, do it
-deliberately, not by accident.
-
-**The shared configuration is readable by anyone.** This repository is public, so
-the shared file must never contain anything sensitive. It holds review tool toggles
-only.
-
-## Editing the shared file
-
-Treat an edit here as a change to every repository's review behavior, because that
-is what it is.
-
-- Open a pull request. Do not push to `main`.
-- Validate keys against CodeRabbit's schema before pushing. Unknown keys are
-  rejected and CodeRabbit posts a configuration error instead of a review:
-
-  ```bash
-  curl -sSL https://coderabbit.ai/integrations/schema.v2.json -o /tmp/cr.json
-  ```
-
-- Note that `remote_config` itself is **not** in that schema, so the pointer form
-  cannot be schema checked. A wrong key there does not raise an error, it falls
-  back to defaults silently, which looks exactly like a working configuration until
-  someone notices pull requests are no longer being approved. Verify a pointer
-  change by commenting `@coderabbitai configuration` on a pull request and reading
-  the reported source path, for example:
-
-  ```text
-  Configuration used: Path: geolonia/.github/.coderabbit.yaml@main (via .coderabbit.yaml)
-  ```
-
-- Keep the file free of settings that only make sense in one repository.
-- Prefer small changes, and revert quickly if reviews start behaving oddly.
-- Remember that the change will not affect the pull request making it, since
-  reviews use the base branch configuration.
-
-## Reaching an approving review
-
-A repository's branch rules require an approving review before merge. CodeRabbit
-supplies that approval once every comment it raised is resolved and it has
-reviewed the latest commit. Two settings make this work, and both live in the
-shared file: `reviews.request_changes_workflow` and
-`reviews.auto_review.auto_incremental_review`.
-
-Some pull requests get no CodeRabbit review at all, and therefore cannot reach an
-approval on their own:
-
-- **Draft pull requests.** Mark the pull request ready for review.
-- **Pull requests based on another feature branch.** CodeRabbit reviews only pull
-  requests targeting the default branch. Retarget, or ask a human to review.
-
-A code owner requirement is also outside CodeRabbit's reach. A GitHub App cannot
-be listed in `CODEOWNERS`, so a pull request touching an owned path always needs
-an approval from the owning team.
+- A configuration change does not affect the pull request that makes it. Reviews
+  use the configuration already on the base branch, so changes apply from the next
+  review after they merge.
+- Comment `@coderabbitai configuration` on any pull request to see the settings it
+  resolved and where each came from.
+- The shared file is public. Keep secrets out of it.
 
 ## Related pages
 
