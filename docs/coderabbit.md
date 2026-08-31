@@ -39,8 +39,9 @@ Without `inheritance: true`, any keys you add next to `remote_config` are ignore
 
 ## Replace it
 
-To opt out entirely, delete the `remote_config` block and write a full
-configuration for your repository. See the
+To opt out entirely, delete the `remote_config` block, delete `inheritance: true`
+if you added it, and write a full configuration for your repository. Leaving
+`inheritance` on would keep merging settings from the organization level. See the
 [CodeRabbit configuration reference](https://docs.coderabbit.ai/reference/yaml-template).
 
 ## Good to know
