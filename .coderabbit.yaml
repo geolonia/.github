@@ -1,14 +1,29 @@
 language: en-US
 reviews:
   profile: assertive
-  request_changes_workflow: false
+  # Approve automatically once every CodeRabbit comment is resolved and the
+  # latest commit has been reviewed. Human approval is no longer required by
+  # default, so CodeRabbit has to be able to satisfy the required review.
+  request_changes_workflow: true
   high_level_summary: true
   poem: false
   review_status: true
   collapse_walkthrough: false
+  # Noise reduction: keep the review itself, drop the decorative extras.
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  related_issues: false
+  related_prs: false
+  suggested_reviewers: false
   auto_review:
     enabled: true
     auto_incremental_review: true
+  # Do not open follow up work on its own.
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
   path_filters:
     - "!**/pnpm-lock.yaml"
     - "!**/yarn.lock"
