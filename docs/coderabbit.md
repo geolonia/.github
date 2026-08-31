@@ -16,16 +16,30 @@ keeps a real `.coderabbit.yaml` at its own root, containing only a pointer:
 
 ```yaml
 remote_config:
-  url: https://raw.githubusercontent.com/geolonia/.github/main/.coderabbit.yaml
+  repository: geolonia/.github
+  ref: main
+  path: .coderabbit.yaml
 ```
 
 At review time CodeRabbit reads the repository's own file, sees `remote_config`,
-fetches that URL, and uses the fetched document as the configuration.
+fetches the referenced file, and uses it as the configuration.
 
-To enrol a new repository, add those two lines to its root. That is the whole
+To enrol a new repository, add those four lines to its root. That is the whole
 setup.
 
-## Three consequences worth knowing
+There is also a URL form, pointing at the `raw.githubusercontent.com` address of
+the same file. It works, and every Geolonia repository used it until recently, but
+CodeRabbit documents it as not recommended, so prefer the repository form above.
+
+## Four consequences worth knowing
+
+**Reviews use the configuration on the base branch, not the head branch.** This is
+the one that surprises people. A pull request that adds or edits `.coderabbit.yaml`
+is still reviewed with the configuration that was already on the base branch, so a
+configuration change never affects its own pull request. Enrolling a repository
+takes effect on the next pull request opened after the enrolling one merges. To see
+which configuration a review actually used, comment `@coderabbitai configuration`
+on the pull request.
 
 **The pointer is resolved at review time, against `main`.** Merging a change to
 the shared file changes review behavior everywhere on the next CodeRabbit review,
@@ -33,17 +47,19 @@ including the next review of a pull request that is already open. No
 per-repository bump is needed, and there is no staged rollout. Revert the change
 to roll back.
 
-**It is a whole file replacement, not a merge.** Any key sitting next to
-`remote_config` in a repository's local file is ignored without warning. So
-pasting a configuration snippet into a repository root does not add a setting on
-top of the shared config, it detaches that repository from the shared config
-entirely, silently, and permanently. If a repository genuinely needs different
-rules, that is the supported way to opt out: drop the pointer and write a full
-configuration. Do it deliberately, not by accident.
+**By default it is a whole file replacement, not a merge.** `inheritance` defaults
+to `false`, which means CodeRabbit stops at the first configuration source it
+finds. Any key sitting next to `remote_config` in a repository's local file is
+ignored without warning, so pasting a configuration snippet into a repository root
+does not add a setting on top of the shared config, it detaches that repository
+from the shared config entirely and silently. Setting `inheritance: true` changes
+this and merges values from parent levels instead, which is the supported way for a
+repository to extend the shared config rather than replace it. Either way, do it
+deliberately, not by accident.
 
-**The file is fetched over plain HTTPS from a public URL.** This repository must
-stay public for review to keep working anywhere, and the shared configuration must
-never contain anything sensitive. It holds review tool toggles only.
+**The shared configuration is readable by anyone.** This repository is public, so
+the shared file must never contain anything sensitive. It holds review tool toggles
+only.
 
 ## Editing the shared file
 
@@ -58,8 +74,21 @@ is what it is.
   curl -sSL https://coderabbit.ai/integrations/schema.v2.json -o /tmp/cr.json
   ```
 
+- Note that `remote_config` itself is **not** in that schema, so the pointer form
+  cannot be schema checked. A wrong key there does not raise an error, it falls
+  back to defaults silently, which looks exactly like a working configuration until
+  someone notices pull requests are no longer being approved. Verify a pointer
+  change by commenting `@coderabbitai configuration` on a pull request and reading
+  the reported source path, for example:
+
+  ```text
+  Configuration used: Path: geolonia/.github/.coderabbit.yaml@main (via .coderabbit.yaml)
+  ```
+
 - Keep the file free of settings that only make sense in one repository.
 - Prefer small changes, and revert quickly if reviews start behaving oddly.
+- Remember that the change will not affect the pull request making it, since
+  reviews use the base branch configuration.
 
 ## Reaching an approving review
 
