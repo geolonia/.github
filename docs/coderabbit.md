@@ -20,29 +20,26 @@ That is the whole setup. Repositories created through the Backstage
 
 ## Extend it
 
-To keep the shared settings and add your own on top, set `inheritance: true` and
-list only what you want to change:
+Not possible today. Take the shared settings as they are, or replace them.
 
-```yaml
-inheritance: true
-remote_config:
-  repository: geolonia/.github
-  ref: main
-  path: .coderabbit.yaml
-reviews:
-  profile: chill
-  path_filters:
-    - "!vendor/**"
-```
+Adding your own keys next to `remote_config` does nothing. Adding
+`inheritance: true` is worse: it throws the shared settings away without telling
+you, and CodeRabbit stops approving pull requests in that repository.
 
-Without `inheritance: true`, any keys you add next to `remote_config` are ignored.
+If you want a setting changed, change it in the shared file so everyone gets it.
 
 ## Replace it
 
-To opt out entirely, delete the `remote_config` block, delete `inheritance: true`
-if you added it, and write a full configuration for your repository. Leaving
-`inheritance` on would keep merging settings from the organization level. See the
-[CodeRabbit configuration reference](https://docs.coderabbit.ai/reference/yaml-template).
+Delete everything in `.coderabbit.yaml` and write your own, using the
+[CodeRabbit reference](https://docs.coderabbit.ai/reference/yaml-template). Include:
+
+```yaml
+reviews:
+  request_changes_workflow: true
+```
+
+Without it CodeRabbit never approves, and every pull request needs a human
+approver.
 
 ## Good to know
 
