@@ -31,9 +31,15 @@ If you want a setting changed, change it in the shared file so everyone gets it.
 ## Replace it
 
 Delete everything in `.coderabbit.yaml` and write your own, using the
-[CodeRabbit reference](https://docs.coderabbit.ai/reference/yaml-template). Include
-`reviews.request_changes_workflow: true`, or CodeRabbit will not approve pull
-requests and every one will need a human approver.
+[CodeRabbit reference](https://docs.coderabbit.ai/reference/yaml-template). Include:
+
+```yaml
+reviews:
+  request_changes_workflow: true
+```
+
+Without it CodeRabbit never approves, and every pull request needs a human
+approver.
 
 ## Good to know
 
