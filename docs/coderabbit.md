@@ -40,9 +40,19 @@ CodeRabbit documents it as not recommended, so prefer the repository form above.
 the one that surprises people. A pull request that adds or edits `.coderabbit.yaml`
 is still reviewed with the configuration that was already on the base branch, so a
 configuration change never affects its own pull request. Enrolling a repository
-takes effect on the next pull request opened after the enrolling one merges. To see
-which configuration a review actually used, comment `@coderabbitai configuration`
-on the pull request.
+takes effect on the next pull request opened after the enrolling one merges.
+
+CodeRabbit's own documentation describes the opposite, saying the configuration on
+the branch under review is used. Our observations contradict it: three
+same-repository pull requests that carried a changed or added configuration on the
+head branch were each reviewed on the base branch configuration instead. Fork pull
+requests were not tested, so treat the rule above as describing same-repository
+pull requests.
+
+Be careful with `@coderabbitai configuration` here. It is the right tool for
+auditing which configuration a pointer resolves to, and it does read the head
+branch, but that means its answer can differ from what the review actually used.
+Use it to check that a pointer resolves, not to prove what a review ran on.
 
 **The pointer is resolved at review time, against `main`.** Merging a change to
 the shared file changes review behavior everywhere on the next CodeRabbit review,
