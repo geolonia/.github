@@ -49,20 +49,25 @@ For repos using `geolonia-infra-cdk` to manage their deploy role, add
 
 ## Example integration
 
-```yaml
-# Top-level permissions must include all permissions the monitor needs.
-# If this workflow is called as a reusable workflow, the parent must also
-# declare the same permissions.
-permissions:
-  id-token: write
-  contents: write
-  models: read
+Declare the monitor's permissions on the monitor job, not at the top level.
+`contents: write` at the top level would also widen your deploy job, which
+usually needs only `contents: read` for its checkout. If this workflow is itself
+called as a reusable workflow, the parent must grant at least these, because a
+caller can only narrow the token, never widen it.
 
+```yaml
 jobs:
   deploy:
     # ... your existing deploy job, unchanged
+    permissions:
+      id-token: write
+      contents: read # checkout only
 
   monitor:
+    permissions:
+      id-token: write # OIDC: assume the monitor role
+      contents: write # post deploy-status commit comments
+      models: read # GitHub Models: AI analysis of deploy progress
     uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
     with:
       stack_name: MyAppStack
