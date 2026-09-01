@@ -6,14 +6,30 @@
 #   1. Set CDK_DEPLOY_ROLE_ARN secret in your repo (the same OIDC role used for CDK deploy,
 #      with CdkDeployMonitor permissions added -- see docs/workflows.md in geolonia/.github).
 #   2. Replace stack_name and aws_region with your values.
-#   3. Add these permissions to your workflow's top-level permissions block:
-#        contents: write      # required for commit comments
-#        pull-requests: write # required for PR annotations
+#
+# The monitor job declares its own permissions below, so it needs nothing from
+# your workflow's top-level permissions block. Do not narrow them. Each one
+# fails differently, and only the first is loud:
+#
+#   id-token: write  hard failure. The OIDC role assume errors and the job fails.
+#   contents: write  silent. Commit comments are skipped with a warning in the log.
+#   models: read     silent. The AI check logs "AI unreachable" and defaults to
+#                    CONTINUE, so the monitor keeps polling but no longer
+#                    analyses anything.
+#
+# The two silent modes are the dangerous ones: the job still goes green, so a
+# narrowed block looks fine and you quietly lose the monitoring this workflow
+# exists to provide.
 
 jobs:
   # ... your existing deploy job here ...
 
   monitor:
+    # Least privilege for this job alone, matching what the reusable declares.
+    permissions:
+      id-token: write # OIDC: assume the monitor role (CloudFormation / ECS / logs)
+      contents: write # post deploy-status commit comments
+      models: read # GitHub Models: AI analysis of deploy progress
     uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@a7f7ab930920429ec1ea9373ae7325fb769edfcc # v1.37.0
     with:
       stack_name: MyAppStack        # CloudFormation stack name
