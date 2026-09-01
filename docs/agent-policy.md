@@ -39,6 +39,61 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 - Avoid destructive git commands unless explicitly requested.
 - Keep changes minimal and aligned with existing patterns.
 
+## CI and GitHub Actions security
+
+These rules apply to every workflow you add or edit. The `zizmor` job in the
+Security Suite gates pull requests on error-severity findings, so a workflow
+that breaks them will usually fail the check before a human looks at it.
+`pinact` findings are warn-only and do not block a merge.
+
+- **Default to `pull_request`.** For a pull request from a fork it runs with a
+  read-only `GITHUB_TOKEN` and no repository secrets, so long as the repository
+  has not opted into sending write tokens or secrets to fork pull request
+  workflows. A private repository can enable both in its Actions settings, so
+  confirm that before relying on the guarantee.
+- **Never run untrusted pull request code with secrets in scope.**
+  `pull_request_target` and `workflow_run` run in the context of the base
+  repository, with its secrets and a write-capable token. Combining either with
+  a checkout of the pull request head (`github.event.pull_request.head.sha`, or
+  the head ref) and any step that executes repository content (a build, a test,
+  an install that runs lifecycle scripts) hands that token to whoever opened the
+  pull request. See
+  [GitHub's guidance on securely using `pull_request_target`](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target).
+- **To read untrusted code and still write to the pull request, use two
+  workflows, not two jobs.** `permissions:` can only narrow the token GitHub
+  issued for the event, never widen it, so a second job in the same
+  fork-triggered `pull_request` run cannot gain write access. Run the untrusted
+  code in the `pull_request` workflow and upload its output as an artifact, then
+  have a separate `workflow_run` workflow, which runs in the base repository
+  context, download that artifact and post the result. In the privileged
+  workflow:
+  1. Never check out the pull request head.
+  2. Treat the artifact as untrusted input, because it was produced by a job
+     that ran the pull request's own code. Confirm it came from the workflow and
+     run you expect, validate its shape, and never execute or source a file out
+     of it.
+  3. Do not trust a pull request number carried in the artifact. A job running
+     the pull request's code can emit a schema-valid artifact naming a different
+     pull request, which would point your write-capable workflow at it. Resolve
+     the pull request from the triggering run's own metadata
+     (`workflow_run.head_repository` and `workflow_run.head_sha`) and reject an
+     artifact that disagrees. Note that `workflow_run.pull_requests` is empty
+     for fork pull requests, so the head SHA is the reliable key.
+- **Set least-privilege `permissions:`.** Declare them explicitly, per job where
+  jobs differ, and grant only what the job uses. An omitted block inherits the
+  configured default, which may be broader than the job needs. Use
+  `permissions: {}` for a job that needs no repository or API access at all;
+  `GITHUB_TOKEN` still exists, it simply carries no scopes.
+- **Pin third-party actions to a full commit SHA.** See
+  [Pinning GitHub Actions](github-actions-pinning.md).
+- **Treat `github.event.*` as untrusted input.** Pull request titles, branch
+  names, and bodies are controlled by whoever opened them. Do not interpolate
+  them into a `run:` script; pass them through `env:` and quote the variable.
+- **Do not persist credentials a job does not need.** Pass
+  `persist-credentials: false` to `actions/checkout` when the job performs no
+  git operation, so the token is not left in `.git/config` for later steps to
+  read.
+
 ## Code reviews
 
 - After opening a PR, CodeRabbit posts an automated review within a few minutes.
