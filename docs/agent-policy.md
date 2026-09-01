@@ -39,6 +39,38 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 - Avoid destructive git commands unless explicitly requested.
 - Keep changes minimal and aligned with existing patterns.
 
+## CI and GitHub Actions security
+
+These rules apply to every workflow you add or edit. The `zizmor` job in the
+Security Suite gates pull requests on error-severity findings, so a workflow
+that breaks them will usually fail the check before a human looks at it.
+
+- **Default to `pull_request`.** It is the safe trigger: a pull request from a
+  fork gets a read-only token and no access to repository secrets.
+- **Never run untrusted pull request code with secrets in scope.**
+  `pull_request_target` and `workflow_run` run in the context of the base
+  repository, with its secrets and a write-capable token. Combining either with
+  a checkout of the pull request head (`github.event.pull_request.head.sha`, or
+  the head ref) and any step that executes repository content (a build, a test,
+  an install that runs lifecycle scripts) hands that token to whoever opened the
+  pull request. See
+  [GitHub's guidance on securely using `pull_request_target`](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target).
+- **If a workflow must read untrusted code and also write to the pull request,
+  split it.** One `pull_request` job runs the untrusted code with no token, and
+  a separate privileged job posts the result and never checks out the head.
+- **Set least-privilege `permissions:`.** Declare them explicitly, per job where
+  jobs differ, and grant only what the job uses. An omitted `permissions:` block
+  inherits a broad default.
+- **Pin third-party actions to a full commit SHA.** See
+  [Pinning GitHub Actions](github-actions-pinning.md).
+- **Treat `github.event.*` as untrusted input.** Pull request titles, branch
+  names, and bodies are controlled by whoever opened them. Do not interpolate
+  them into a `run:` script; pass them through `env:` and quote the variable.
+- **Do not persist credentials a job does not need.** Pass
+  `persist-credentials: false` to `actions/checkout` when the job performs no
+  git operation, so the token is not left in `.git/config` for later steps to
+  read.
+
 ## Code reviews
 
 - After opening a PR, CodeRabbit posts an automated review within a few minutes.
