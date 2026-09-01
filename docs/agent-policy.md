@@ -44,9 +44,13 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 These rules apply to every workflow you add or edit. The `zizmor` job in the
 Security Suite gates pull requests on error-severity findings, so a workflow
 that breaks them will usually fail the check before a human looks at it.
+`pinact` findings are warn-only and do not block a merge.
 
-- **Default to `pull_request`.** It is the safe trigger: a pull request from a
-  fork gets a read-only token and no access to repository secrets.
+- **Default to `pull_request`.** For a pull request from a fork it runs with a
+  read-only `GITHUB_TOKEN` and no repository secrets, so long as the repository
+  has not opted into sending write tokens or secrets to fork pull request
+  workflows. A private repository can enable both in its Actions settings, so
+  confirm that before relying on the guarantee.
 - **Never run untrusted pull request code with secrets in scope.**
   `pull_request_target` and `workflow_run` run in the context of the base
   repository, with its secrets and a write-capable token. Combining either with
@@ -55,12 +59,19 @@ that breaks them will usually fail the check before a human looks at it.
   an install that runs lifecycle scripts) hands that token to whoever opened the
   pull request. See
   [GitHub's guidance on securely using `pull_request_target`](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target).
-- **If a workflow must read untrusted code and also write to the pull request,
-  split it.** One `pull_request` job runs the untrusted code with no token, and
-  a separate privileged job posts the result and never checks out the head.
+- **To read untrusted code and still write to the pull request, use two
+  workflows, not two jobs.** `permissions:` can only narrow the token GitHub
+  issued for the event, never widen it, so a second job in the same
+  fork-triggered `pull_request` run cannot gain write access. Run the untrusted
+  code in the `pull_request` workflow and upload its output as an artifact, then
+  have a separate `workflow_run` workflow, which runs in the base repository
+  context, download that artifact and post the result. The privileged workflow
+  must never check out the pull request head.
 - **Set least-privilege `permissions:`.** Declare them explicitly, per job where
-  jobs differ, and grant only what the job uses. An omitted `permissions:` block
-  inherits a broad default.
+  jobs differ, and grant only what the job uses. An omitted block inherits the
+  configured default, which may be broader than the job needs. Use
+  `permissions: {}` for a job that needs no repository or API access at all;
+  `GITHUB_TOKEN` still exists, it simply carries no scopes.
 - **Pin third-party actions to a full commit SHA.** See
   [Pinning GitHub Actions](github-actions-pinning.md).
 - **Treat `github.event.*` as untrusted input.** Pull request titles, branch
