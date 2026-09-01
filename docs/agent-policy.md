@@ -66,7 +66,12 @@ that breaks them will usually fail the check before a human looks at it.
   code in the `pull_request` workflow and upload its output as an artifact, then
   have a separate `workflow_run` workflow, which runs in the base repository
   context, download that artifact and post the result. The privileged workflow
-  must never check out the pull request head.
+  must never check out the pull request head, and must treat the artifact as
+  untrusted input, because it was produced by a job that ran the pull request's
+  own code. Confirm the artifact came from the expected workflow and run,
+  validate its shape before using any value from it, and never execute or
+  source a file out of it. A pull request number read from an unvalidated
+  artifact can point the privileged workflow at a different pull request.
 - **Set least-privilege `permissions:`.** Declare them explicitly, per job where
   jobs differ, and grant only what the job uses. An omitted block inherits the
   configured default, which may be broader than the job needs. Use
