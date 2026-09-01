@@ -65,13 +65,20 @@ that breaks them will usually fail the check before a human looks at it.
   fork-triggered `pull_request` run cannot gain write access. Run the untrusted
   code in the `pull_request` workflow and upload its output as an artifact, then
   have a separate `workflow_run` workflow, which runs in the base repository
-  context, download that artifact and post the result. The privileged workflow
-  must never check out the pull request head, and must treat the artifact as
-  untrusted input, because it was produced by a job that ran the pull request's
-  own code. Confirm the artifact came from the expected workflow and run,
-  validate its shape before using any value from it, and never execute or
-  source a file out of it. A pull request number read from an unvalidated
-  artifact can point the privileged workflow at a different pull request.
+  context, download that artifact and post the result. In the privileged
+  workflow:
+  1. Never check out the pull request head.
+  2. Treat the artifact as untrusted input, because it was produced by a job
+     that ran the pull request's own code. Confirm it came from the workflow and
+     run you expect, validate its shape, and never execute or source a file out
+     of it.
+  3. Do not trust a pull request number carried in the artifact. A job running
+     the pull request's code can emit a schema-valid artifact naming a different
+     pull request, which would point your write-capable workflow at it. Resolve
+     the pull request from the triggering run's own metadata
+     (`workflow_run.head_repository` and `workflow_run.head_sha`) and reject an
+     artifact that disagrees. Note that `workflow_run.pull_requests` is empty
+     for fork pull requests, so the head SHA is the reliable key.
 - **Set least-privilege `permissions:`.** Declare them explicitly, per job where
   jobs differ, and grant only what the job uses. An omitted block inherits the
   configured default, which may be broader than the job needs. Use
