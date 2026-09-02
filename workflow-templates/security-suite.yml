@@ -12,11 +12,13 @@ name: Security Suite
 # you do not need this file (it would run the suite twice). Use this template
 # only for repos outside that ruleset.
 
+# No `branches:` filter on purpose: every pull request is scanned, whatever its
+# base. A stacked pull request (opened against another feature branch to keep
+# the diff reviewable) is retargeted to the default branch when its base merges,
+# and that retarget fires no workflow, so filtering by base would leave it
+# permanently unscanned while still looking reviewed.
 on:
   pull_request:
-    # The template picker replaces $default-branch with the adopting repo's
-    # default branch, so this works for repos that do not use `main`.
-    branches: ["$default-branch"]
 
 concurrency:
   group: security-suite-${{ github.event.pull_request.number || github.ref }}

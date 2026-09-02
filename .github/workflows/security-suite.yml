@@ -9,18 +9,27 @@ name: Security Suite
 #
 # and every targeted repo runs the suite with NO file of its own.
 # geolonia/.github is public, so the ruleset can target public, internal,
-# and private repos. The same thin caller is also offered in the org "New
-# workflow" picker (workflow-templates/security-suite.yml) for repos that
-# opt in manually instead of via the ruleset. Do not run both on one repo.
+# and private repos. A ruleset-injected run IGNORES every event filter in the
+# `on:` block below (branches, paths, types); which pull requests it covers is
+# decided by the ruleset's own ref condition, so that condition, not this file,
+# is what has to include non-default base branches.
+#
+# The same thin caller is also offered in the org "New workflow" picker
+# (workflow-templates/security-suite.yml) for repos that opt in manually
+# instead of via the ruleset. Do not run both on one repo.
 #
 # All suite logic (bumblebee, betterleaks, pinact, zizmor, and the single
 # consolidated PR comment) lives in the reusable so there is one source of
 # truth. See reusable-security-suite.yml.
 
+# No `branches:` filter on purpose. A pull request opened against a base other
+# than the default branch (a stacked PR, kept small so it stays reviewable) must
+# be scanned too: when its base merges, GitHub retargets it to the default
+# branch WITHOUT firing any workflow, so an unfiltered run at open time is the
+# only scan it ever gets. Ruleset consumers ignore this block entirely (see
+# above), so this governs only this repository's own pull requests.
 on:
   pull_request:
-    branches:
-      - main
 
 # Serialize runs per PR so two overlapping runs cannot both miss the marker
 # comment and each post a "single" consolidated comment.

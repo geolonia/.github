@@ -24,6 +24,34 @@ no per-caller bump. The same suite is also offered in the "New workflow" picker
 (`workflow-templates/security-suite.yml`) for repos that opt in manually.
 **Do not enable both on one repo.**
 
+### Which pull requests it covers (the ruleset decides, not the `on:` block)
+
+A ruleset-injected run **ignores every event filter** in the workflow's `on:`
+block: `branches`, `branches-ignore`, `paths`, `types`, all of it. The workflow
+must declare `pull_request` for the ruleset to have something to inject, but
+after that only the ruleset's own `ref_name` condition decides which pull
+requests are covered ([GitHub docs][ruleset-workflows]).
+
+So the ruleset condition is the thing to get right:
+
+```bash
+gh api /orgs/geolonia/rulesets/<ruleset_id> --jq '.conditions.ref_name.include'
+# ["~ALL"]  <- every base branch, including stacked pull requests
+```
+
+**It must not be narrowed to `~DEFAULT_BRANCH`.** A pull request opened against
+another feature branch (stacking, which is how a large change stays reviewable)
+would then be scanned by nothing. That is not a small window: when the base
+branch merges, GitHub retargets the stacked pull request to the default branch
+**without firing any workflow**, so it lands on the default branch having never
+been scanned, and nothing about it looks unchecked. CodeRabbit is not
+branch-filtered, so the review comes back green as usual.
+
+The `push` trigger, where a caller has one, can keep a default-branch filter:
+post-merge runs genuinely only need the default branch.
+
+[ruleset-workflows]: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
+
 ## What blocks a PR
 
 The suite fails (red required check) on **error-severity** findings, and warns
