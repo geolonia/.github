@@ -18,6 +18,14 @@ reviews:
   auto_review:
     enabled: true
     auto_incremental_review: true
+    # Review pull requests whatever their base, not only the default branch.
+    # The default ([]) skips any pull request stacked on another feature
+    # branch, and reports it as a passing "Review skipped: reviews are disabled
+    # for this base branch" check, which is indistinguishable from a clean
+    # review. Such a pull request is retargeted to the default branch when its
+    # base merges, and a retarget fires no review, so it would otherwise land
+    # having never been reviewed. Regex, so ".*" is every branch.
+    base_branches: [".*"]
   # Do not open follow up work on its own.
   finishing_touches:
     docstrings:
