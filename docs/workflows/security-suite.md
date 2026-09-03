@@ -22,7 +22,13 @@ geolonia/.github/.github/workflows/security-suite.yml@refs/tags/v1
 calls the scanner reusables, all pinned to `@v1` so a suite change ships with
 no per-caller bump. The same suite is also offered in the "New workflow" picker
 (`workflow-templates/security-suite.yml`) for repos that opt in manually.
-**Do not enable both on one repo.**
+**Do not enable both on one repo**, or every default-branch pull request runs
+the suite twice.
+
+The one deliberate exception is `workflow-templates/security-suite-stacked.yml`,
+which is meant to sit alongside the ruleset: it uses `branches-ignore` so it
+covers exactly the pull requests the ruleset cannot. See
+[Covering stacked pull requests instead](#covering-stacked-pull-requests-instead).
 
 ### Which pull requests it covers (the ruleset decides, not the `on:` block)
 
@@ -32,20 +38,48 @@ must declare `pull_request` for the ruleset to have something to inject, but
 after that only the ruleset's own `ref_name` condition decides which pull
 requests are covered ([GitHub docs][ruleset-workflows]).
 
-So the ruleset condition is the thing to get right:
-
 ```bash
 gh api /orgs/geolonia/rulesets/<ruleset_id> --jq '.conditions.ref_name.include'
-# ["~ALL"]  <- every base branch, including stacked pull requests
+# ["~DEFAULT_BRANCH"]
 ```
 
-**It must not be narrowed to `~DEFAULT_BRANCH`.** A pull request opened against
-another feature branch (stacking, which is how a large change stays reviewable)
-would then be scanned by nothing. That is not a small window: when the base
-branch merges, GitHub retargets the stacked pull request to the default branch
-**without firing any workflow**, so it lands on the default branch having never
-been scanned, and nothing about it looks unchecked. CodeRabbit is not
-branch-filtered, so the review comes back green as usual.
+### Do not widen `ref_name` to `~ALL`
+
+It is the obvious fix for stacked pull requests and it **breaks all normal
+development**. A ruleset rule that covers a branch gates **pushes** to that
+branch as well as merges into it, and `do_not_enforce_on_create` exempts only
+the branch's creation. So the first push to a new branch succeeds and every
+follow up commit is rejected:
+
+```
+remote: error: GH013: Repository rule violations found for refs/heads/<branch>
+remote: - Required workflow 'Security Suite' is not satisfied
+```
+
+The deadlock is structural: at push time the suite has not run on the new
+commits, so the requirement can never be satisfied. Plain fast-forward pushes
+fail, not just force pushes. This was tried on 2026-09-03 and reverted the same
+day; it is a known GitHub behaviour, not a misconfiguration of ours.
+
+### Covering stacked pull requests instead
+
+Because the ruleset has to stay on the default branch, a pull request based on
+another feature branch gets no injected run. That matters: when its base
+merges, GitHub retargets it to the default branch **without firing any
+workflow**, so it would arrive having never been scanned.
+
+The companion template `workflow-templates/security-suite-stacked.yml` closes
+that gap. It runs the same suite with `branches-ignore` on the default branch,
+so the two are mutually exclusive and the suite never runs twice on one pull
+request. Add it to repos that are already in the ruleset. This is the one case
+where a repo legitimately has both a suite workflow file and the ruleset.
+
+Know what it does and does not buy. The companion run is **informational**: it
+is not a required check, because making it required means a ruleset rule, which
+is the thing that gates pushes. It converts an invisible gap into a visible red
+X. Hard enforcement still happens where the ruleset applies, at the merge into
+the default branch, so unscanned code still cannot reach the default branch
+either way.
 
 The `push` trigger, where a caller has one, can keep a default-branch filter:
 post-merge runs genuinely only need the default branch.

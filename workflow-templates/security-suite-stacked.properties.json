@@ -1,0 +1,7 @@
+{
+  "name": "Security Suite (stacked PRs)",
+  "description": "Runs the Geolonia security suite on pull requests whose base is NOT the default branch, which the org Security Suite ruleset cannot cover without blocking pushes to every feature branch. Add this only to repos already enrolled in that ruleset; it is an informational run, not a required check.",
+  "iconName": "shield",
+  "categories": ["Automation"],
+  "filePatterns": []
+}
