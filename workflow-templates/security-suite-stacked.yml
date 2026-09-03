@@ -33,15 +33,20 @@ on:
     # default branch, so this works for repos that do not use `main`.
     branches-ignore: ["$default-branch"]
 
-concurrency:
-  group: security-suite-stacked-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
 jobs:
   suite:
+    # `edited` also fires for TITLE and BODY edits, not only base-branch
+    # changes. Without this guard, renaming a pull request would start a full
+    # scan, and (with cancel-in-progress) could cancel one already running.
+    if: github.event.action != 'edited' || github.event.changes.base != null
+    # Concurrency sits on the job, not the workflow, for the same reason: a
+    # metadata-only run must not cancel a real scan before the `if` skips it.
+    concurrency:
+      group: security-suite-stacked-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     # A called reusable can only downgrade the caller's token, so grant the
     # union the suite's jobs need; the reusable narrows each job to its own
     # minimum.
