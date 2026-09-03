@@ -65,8 +65,16 @@ day; it is a known GitHub behaviour, not a misconfiguration of ours.
 
 Because the ruleset has to stay on the default branch, a pull request based on
 another feature branch gets no injected run. That matters: when its base
-merges, GitHub retargets it to the default branch **without firing any
-workflow**, so it would arrive having never been scanned.
+merges, GitHub retargets it to the default branch, and under the **default**
+`pull_request` activity types that fires no workflow at all, so it would
+arrive having never been scanned.
+
+A base-branch change is the `edited` activity, which the default list omits.
+The companion adds it (`types: [opened, synchronize, reopened, edited]`) so a
+pull request restacked from one feature branch onto another is rescanned
+against its new base instead of keeping the old one's result. A retarget to
+the default branch still fires nothing here, deliberately: `branches-ignore`
+excludes it, and the ruleset's required check is what gates that merge.
 
 The companion template `workflow-templates/security-suite-stacked.yml` closes
 that gap. It runs the same suite with `branches-ignore` on the default branch,
