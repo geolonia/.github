@@ -112,11 +112,15 @@ that breaks them will usually fail the check before a human looks at it.
   needs an approval from the owning team no matter what CodeRabbit says.
 - Address human reviewer feedback promptly and resolve threads when the change is applied.
 
-Two cases produce no CodeRabbit review at all, and therefore no approval:
+Some PRs produce no CodeRabbit review at all, and therefore no approval:
 
 - **Draft PRs.** Mark the PR ready for review to get one.
-- **PRs based on another feature branch.** CodeRabbit only reviews PRs that target
-  the default branch. Retarget the PR, or ask a human to review it.
+- **PRs whose every changed file is excluded** by the shared `path_filters`.
+
+A PR based on another feature branch is reviewed like any other. Watch for the
+shape of the skip rather than the list: a skipped PR reports a **passing**
+CodeRabbit check whose text says it was skipped, which reads at a glance like a
+clean review. Check the reason next to the check, not its colour.
 
 ## Team communication
 
