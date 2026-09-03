@@ -49,11 +49,15 @@ approver.
 - Comment `@coderabbitai configuration` on any pull request to see the settings it
   resolved and where each came from.
 - The shared file is public. Keep secrets out of it.
-- Every pull request is reviewed, whatever its base
+- Every **eligible** pull request is reviewed, whatever its base
   (`reviews.auto_review.base_branches: [".*"]`). CodeRabbit's default is the
   default branch only, which reports a stacked pull request as a passing
   "Review skipped: reviews are disabled for this base branch" check. That
   `pass` means skipped, not reviewed, and it looks exactly like a clean review.
+  Base branch is only one of the auto review filters: a **draft** pull request
+  is still skipped until you mark it ready, and `path_filters` still apply. A
+  skip for any of those reasons reports as a `pass` in the same way, so read
+  the reason next to the check rather than its colour.
 - An unknown key falls back to the default **silently**, with no error, so
   confirm a new setting resolved rather than assuming it did.
 
