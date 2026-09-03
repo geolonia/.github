@@ -25,11 +25,6 @@ no per-caller bump. The same suite is also offered in the "New workflow" picker
 **Do not enable both on one repo**, or every default-branch pull request runs
 the suite twice.
 
-The one deliberate exception is `workflow-templates/security-suite-stacked.yml`,
-which is meant to sit alongside the ruleset: it uses `branches-ignore` so it
-covers exactly the pull requests the ruleset cannot. See
-[Covering stacked pull requests instead](#covering-stacked-pull-requests-instead).
-
 ### Which pull requests it covers (the ruleset decides, not the `on:` block)
 
 A ruleset-injected run **ignores every event filter** in the workflow's `on:`
@@ -61,33 +56,51 @@ commits, so the requirement can never be satisfied. Plain fast-forward pushes
 fail, not just force pushes. This was tried on 2026-09-03 and reverted the same
 day; it is a known GitHub behaviour, not a misconfiguration of ours.
 
-### Covering stacked pull requests instead
+### Stacked pull requests: not covered while stacked, by decision
 
 Because the ruleset has to stay on the default branch, a pull request based on
-another feature branch gets no injected run. That matters: when its base
-merges, GitHub retargets it to the default branch, and under the **default**
-`pull_request` activity types that fires no workflow at all, so it would
-arrive having never been scanned.
+another feature branch gets no injected run while it is stacked. When its base
+merges, GitHub retargets it to the default branch, and under the default
+`pull_request` activity types that retarget fires no workflow. So its first
+scan happens at the moment it becomes a pull request into the default branch,
+where the ruleset **blocks the merge until the suite passes**.
 
-A base-branch change is the `edited` activity, which the default list omits.
-The companion adds it (`types: [opened, synchronize, reopened, edited]`) so a
-pull request restacked from one feature branch onto another is rescanned
-against its new base instead of keeping the old one's result. A retarget to
-the default branch still fires nothing here, deliberately: `branches-ignore`
-excludes it, and the ruleset's required check is what gates that merge.
+That is a delay in feedback, not a gap in safety: unscanned code cannot reach
+the default branch. The operations team decided (2026-09-04) to accept that
+delay rather than close it, and to keep the suite managed in exactly one place.
 
-The companion template `workflow-templates/security-suite-stacked.yml` closes
-that gap. It runs the same suite with `branches-ignore` on the default branch,
-so the two are mutually exclusive and the suite never runs twice on one pull
-request. Add it to repos that are already in the ruleset. This is the one case
-where a repo legitimately has both a suite workflow file and the ruleset.
+One operational consequence to know. Because the retarget itself starts nothing,
+a freshly retargeted pull request shows the required check as **"Expected"**
+and stays blocked until a `pull_request` event fires. Any of these does it:
 
-Know what it does and does not buy. The companion run is **informational**: it
-is not a required check, because making it required means a ruleset rule, which
-is the thing that gates pushes. It converts an invisible gap into a visible red
-X. Hard enforcement still happens where the ruleset applies, at the merge into
-the default branch, so unscanned code still cannot reach the default branch
-either way.
+```bash
+git commit --allow-empty -m "chore: trigger the security suite" && git push
+# or, without touching the branch:
+gh pr close <n> && gh pr reopen <n>
+```
+
+A close and reopen is the lighter touch on someone else's pull request, since it
+adds no commit and keeps any existing approvals.
+
+A companion workflow that scanned stacked pull requests was tried on 2026-09-03
+and removed the next day. It worked, and it was withdrawn on purpose. Know why
+before proposing it again:
+
+- It could not enforce anything. A workflow file is not a ruleset rule, so it
+  could only show a red X, and making it required would mean a ruleset rule,
+  which is the thing that gates pushes (see above).
+- It put a workflow file in every enrolled repo and made the suite something to
+  maintain in two places, which is precisely what the ruleset was adopted to
+  avoid. Its only benefit was an earlier warning on a case the ruleset already
+  catches at the finish line.
+- Getting it right was not trivial: `edited` is needed to rescan after a base
+  change, but `edited` also fires on title and body edits, so it needed a
+  job-level guard and job-level concurrency to stop a rename cancelling a real
+  scan.
+
+If the trade is ever revisited, the requirement to meet is: covers stacked
+pull requests, enforced, managed centrally, and does not gate pushes. No
+GitHub ruleset configuration satisfies all four today.
 
 The `push` trigger, where a caller has one, can keep a default-branch filter:
 post-merge runs genuinely only need the default branch.
