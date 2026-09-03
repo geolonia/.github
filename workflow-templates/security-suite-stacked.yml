@@ -22,6 +22,13 @@ name: Security Suite (stacked PRs)
 
 on:
   pull_request:
+    # `edited` is the activity a base-branch change fires, and the default
+    # activity list omits it. Without it, a pull request restacked from one
+    # feature branch onto another keeps the scan it got against the OLD base.
+    # With it, the new base is scanned. (A retarget to the default branch
+    # still fires nothing here, by design: `branches-ignore` excludes it and
+    # the ruleset's required check is what gates that merge.)
+    types: [opened, synchronize, reopened, edited]
     # The template picker replaces $default-branch with the adopting repo's
     # default branch, so this works for repos that do not use `main`.
     branches-ignore: ["$default-branch"]
