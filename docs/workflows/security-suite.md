@@ -69,6 +69,19 @@ That is a delay in feedback, not a gap in safety: unscanned code cannot reach
 the default branch. The operations team decided (2026-09-04) to accept that
 delay rather than close it, and to keep the suite managed in exactly one place.
 
+One operational consequence to know. Because the retarget itself starts nothing,
+a freshly retargeted pull request shows the required check as **"Expected"**
+and stays blocked until a `pull_request` event fires. Any of these does it:
+
+```bash
+git commit --allow-empty -m "chore: trigger the security suite" && git push
+# or, without touching the branch:
+gh pr close <n> && gh pr reopen <n>
+```
+
+A close and reopen is the lighter touch on someone else's pull request, since it
+adds no commit and keeps any existing approvals.
+
 A companion workflow that scanned stacked pull requests was tried on 2026-09-03
 and removed the next day. It worked, and it was withdrawn on purpose. Know why
 before proposing it again:
