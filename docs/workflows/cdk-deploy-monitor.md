@@ -20,8 +20,10 @@ GH Actions timeouts due to hanging CloudFormation updates.
 
 ## How the verdict is decided
 
-The update's start time is the stack's `LastUpdatedTime` (`CreationTime` for a first
-deploy), read once. On each poll the monitor then computes:
+The operation's start time is the stack's own newest `*_IN_PROGRESS` event (the "User
+Initiated" marker), found by paging through up to 500 events once at startup. If it cannot
+be found, the crash-loop rule below is disabled for the run and the log says so; the
+silence rule still applies. On each poll the monitor then computes:
 
 - **Minutes since the last CloudFormation event** for the stack.
 - **Resources in flight**: every resource whose current status, from
@@ -143,7 +145,7 @@ minute startup window expire before the deploy has started.
 
 | Setting | Behaviour |
 |---|---|
-| `false` (default) | Advisory mode: a CANCEL verdict posts one commit comment and the monitor keeps polling. Safe for initial rollout. |
+| `false` (default) | Advisory mode: a CANCEL verdict posts one commit comment and the monitor keeps polling. If the operation then completes successfully the job still passes and the comment stands as a warning; it fails only when the stack ends in a failed or rolled-back state. Safe for initial rollout. |
 | `true` | Automatic: a CANCEL verdict on an `UPDATE_IN_PROGRESS` stack cancels the update, stopping the timeout. Creates and rollbacks cannot be cancelled and fall back to the advisory comment. |
 
 Start with `auto_cancel: false`, read the per-poll verdict lines over a few real deploys,

@@ -183,15 +183,36 @@ jobs:
             done
           fi
 
-          # Authoritative start of this update: LastUpdatedTime, or CreationTime for
-          # a first deploy. Read once; it does not move while the update runs, unlike
-          # anything inferred from a bounded page of events.
-          DEPLOY_START_TS=$(aws cloudformation describe-stacks \
-            --stack-name "$STACK_NAME" \
-            --region "$AWS_REGION" \
-            --query 'Stacks[0].[LastUpdatedTime,CreationTime]' \
-            --output text 2>/dev/null | tr '\t' '\n' | grep -v '^None$' | head -1 || true)
-          echo "Update started at: ${DEPLOY_START_TS:-unknown}"
+          # Start of the current operation: the stack's own newest *_IN_PROGRESS
+          # event ("User Initiated"). The stack is in progress at this point, so that
+          # event belongs to this operation, not a previous one. Events come newest
+          # first; page through up to 500 so a busy update cannot push it out of
+          # reach. Read once; it does not move while the operation runs.
+          DEPLOY_START_TS=""
+          NEXT_TOKEN=""
+          for _page in 1 2 3 4 5; do
+            if [[ -n "$NEXT_TOKEN" ]]; then
+              EVENT_PAGE=$(aws cloudformation describe-stack-events --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+                --max-items 100 --starting-token "$NEXT_TOKEN" --output json 2>/dev/null) || break
+            else
+              EVENT_PAGE=$(aws cloudformation describe-stack-events --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+                --max-items 100 --output json 2>/dev/null) || break
+            fi
+            DEPLOY_START_TS=$(echo "$EVENT_PAGE" | jq -r --arg s "$STACK_NAME" \
+              '[.StackEvents[] | select(.LogicalResourceId == $s and (.ResourceStatus | endswith("IN_PROGRESS")))] | (first | .Timestamp) // empty')
+            [[ -n "$DEPLOY_START_TS" ]] && break
+            NEXT_TOKEN=$(echo "$EVENT_PAGE" | jq -r '.NextToken // empty')
+            [[ -z "$NEXT_TOKEN" ]] && break
+          done
+          if [[ -n "$DEPLOY_START_TS" ]]; then
+            echo "Operation started at: $DEPLOY_START_TS"
+          else
+            # Without a start time every stopped task ECS still remembers would count,
+            # including ones drained by a previous deploy. Better no crash-loop rule
+            # than a wrong one; the silence rule still applies.
+            echo "Could not establish when this operation started -- abnormal-task cancellation disabled for this run."
+            MAX_FAILED_TASKS=0
+          fi
 
           CANCEL_ISSUED=false      # a CANCEL verdict was reached; the job exits 1 at the end
           CANCEL_ACTIONED=false    # cancel-update-stack has been attempted
@@ -237,7 +258,14 @@ jobs:
               echo "Stack reached terminal state: $STACK_STATUS -- monitor exiting."
               if [[ "$CANCEL_ISSUED" == "true" ]]; then
                 [[ "$COMMENT_POSTED" != "true" ]] && echo "::error::A CANCEL verdict was reached but the commit comment could not be posted."
-                exit 1
+                # An advisory CANCEL that the deploy then recovered from is not a
+                # failure of the deploy; only fail the job when the stack did not end
+                # in a successful state.
+                case "$STACK_STATUS" in
+                  CREATE_COMPLETE|UPDATE_COMPLETE)
+                    echo "A CANCEL verdict was issued earlier but the operation completed successfully; the comment stands as a warning." ;;
+                  *) exit 1 ;;
+                esac
               fi
               exit 0
             fi
@@ -357,6 +385,9 @@ jobs:
             fi
             echo "Verdict: ${VERDICT} -- silent ${MINUTES_SINCE_EVENT}m of ${EFFECTIVE_THRESHOLD}m allowed; in flight: ${IN_FLIGHT_SUMMARY:-none reported}; abnormal task stops: ${FAILED_TASK_COUNT}"
             [[ -n "$REASON" ]] && echo "Reason: ${REASON}"
+            if [[ "$VERDICT" == "CONTINUE" && "$CANCEL_ISSUED" == "true" ]]; then
+              echo "The operation is producing events again after an earlier CANCEL verdict; continuing to monitor."
+            fi
 
             if [[ "$VERDICT" == "CANCEL" ]]; then
               CANCEL_ISSUED=true
