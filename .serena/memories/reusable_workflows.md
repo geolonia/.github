@@ -25,10 +25,10 @@ locations** in this repo plus a **tag-pinning convention** in callers.
 - **`release-auto-on-tag`** - semver-tag-triggered releases (`v*.*.*`).
   Optional inputs control prereleases, release notes, custom regex.
 - **`cdk-deploy-monitor`** - runs alongside a CDK deploy job, polls
-  CloudFormation/CloudWatch/ECS, asks GitHub Models (GPT-4o) whether the
-  deploy is hung, optionally cancels on CANCEL verdict. Requires
-  `CdkDeployMonitor` IAM permission bundle and `models: read` permission
-  in the calling workflow + every parent in the call chain.
+  CloudFormation/CloudWatch/ECS, applies a deterministic hang rule (GitHub Models was retired 2026-07-30) to decide whether the
+  deploy is hung, optionally cancels on CANCEL verdict. Requires the
+  `CdkDeployMonitor` IAM permission bundle and `contents: write` in the
+  calling workflow + every parent in the call chain.
 - **`sync-team-access`** - keeps GitHub team-to-repo access in sync.
 - **`security-suite`** - consolidated per-PR security gate (bumblebee,
   betterleaks, pinact, zizmor) posting ONE PR comment. Enforced org-wide as a
@@ -120,7 +120,7 @@ an annotated `v1`.)
   org-level `TECHDOCS_AWS_ACCOUNT_ID` secret is visible to the calling
   repo, or the per-repo `AWS_ACCOUNT_ID` override is set.
 - **CDK deploy monitor doesn't post comments** - needs `contents: write`
-  + `models: read` on the **caller's** top-level `permissions:` block.
+  on the caller's monitor job and every parent job in the call chain.
 - **Security Suite required check stuck at "Expected"** on consumer PRs with no
   "Security Suite" run in Actions - the `v1` tag is ANNOTATED. Recreate it
   lightweight (`git tag -d v1; git tag v1 <commit>; git push -f origin v1`).

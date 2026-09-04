@@ -1,24 +1,49 @@
 # CDK Deploy Monitor (`reusable-cdk-deploy-monitor.yml`)
 
 Runs as a parallel job alongside a CDK deploy. On every poll cycle it fetches the
-CloudFormation stack status, recent CloudFormation events, recent CloudWatch logs, and
-recently stopped ECS task diagnostics (exit codes and stopped reasons), then asks the
-GitHub Models AI (GPT-4o) whether the deployment is progressing normally or is stuck.
-The AI verdict is logged to the job output; a CANCEL verdict is also posted as a commit
-comment. If `auto_cancel` is enabled and the AI says CANCEL, the workflow calls
-`cancel-update-stack`, triggering a rollback and causing the deploy job to fail cleanly
-instead of timing out.
+CloudFormation stack status and recent events, the resources still in flight, recently
+stopped ECS tasks (exit codes and stopped reasons) and, optionally, recent CloudWatch
+logs, then applies a deterministic rule to decide whether the update is progressing or
+hung. A CANCEL verdict is posted once as a commit comment. If `auto_cancel` is enabled
+and the stack is in `UPDATE_IN_PROGRESS`, the workflow also calls
+`cancel-update-stack`, triggering a rollback so the deploy job fails cleanly instead of
+sitting in the six-hour Actions timeout.
+
+The verdict used to come from GitHub Models. That service was retired on 2026-07-30, so
+the rule below now encodes the same reasoning without an external model.
 
 ## When to use it
 
 Add this to any repo that deploys CDK stacks via GitHub Actions and has experienced
 GH Actions timeouts due to hanging CloudFormation updates.
 
-## Prerequisites
+## How the verdict is decided
 
-- The Geolonia GitHub org has GitHub Copilot enabled (required for GitHub Models API access).
-- The calling workflow and all parent workflows in the call chain must declare
-  `models: read` in their top-level `permissions:` block.
+On each poll the monitor computes:
+
+- **Minutes since the last CloudFormation event** for the stack.
+- **Resources in flight**: for each logical resource touched by the current update, its
+  newest event; the resource counts as in flight while that status is `*_IN_PROGRESS`.
+- **Abnormally stopped ECS tasks** since the update started: stopped tasks whose reason
+  is anything other than being drained by the deployment (`Scaling activity initiated by
+  (deployment ...)`). Essential container exits, OOM kills, failed ELB health checks and
+  image pull or init errors all count.
+
+Then, in this order:
+
+1. If `max_failed_tasks` is greater than zero and that many tasks have stopped
+   abnormally, the verdict is **CANCEL**: the new task definition is not becoming
+   healthy and CloudFormation would otherwise wait for ECS to give up on its own.
+2. Otherwise, if the stack has been silent for `hang_threshold_minutes`, the verdict is
+   **CANCEL**, with one exception: while *every* in-flight resource is one of
+   `slow_resource_types` (by default ECS services, CloudFront distributions, ACM
+   certificates and RDS instances or clusters, all of which legitimately produce no
+   events for a long time), `slow_resource_grace_minutes` applies instead.
+3. Otherwise the verdict is **CONTINUE**.
+
+Every poll logs the verdict together with the silence so far, the effective threshold,
+what is in flight and the abnormal task count, so a CONTINUE is as explainable as a
+CANCEL.
 
 ## Required IAM permissions for `aws_role_arn`
 
@@ -59,6 +84,7 @@ caller can only narrow the token, never widen it.
 jobs:
   deploy:
     # ... your existing deploy job, unchanged
+    environment: production
     permissions:
       id-token: write
       contents: read # checkout only
@@ -67,7 +93,6 @@ jobs:
     permissions:
       id-token: write # OIDC: assume the monitor role
       contents: write # post deploy-status commit comments
-      models: read # GitHub Models: AI analysis of deploy progress
     uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
     with:
       stack_name: MyAppStack
@@ -75,29 +100,20 @@ jobs:
       log_group_name: "MyAppStack-MyLogGroup"   # optional
       hang_threshold_minutes: 10                 # optional, default: 10
       auto_cancel: false                         # optional, default: false
+      environment_name: production               # optional, same gate as the deploy job
     secrets:
-      aws_role_arn: ${{ needs.build-and-push.outputs.monitor_role_arn }}
+      aws_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-cdk-deploy-myapp
 ```
 
-> **Note on passing the role ARN:** The `secrets:` block of a reusable workflow call
-> does not have access to the `env` context. The recommended pattern is to construct the
-> full ARN in a preceding job that has `environment: production` (where `vars.AWS_ACCOUNT_ID`
-> resolves correctly), expose it as a job output, and pass it via `needs.<job>.outputs.<key>`.
->
-> ```yaml
-> jobs:
->   build-and-push:
->     environment: production
->     outputs:
->       monitor_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-cdk-deploy-myapp
->     steps: [...]
->
->   monitor:
->     needs: build-and-push
->     uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@v1
->     secrets:
->       aws_role_arn: ${{ needs.build-and-push.outputs.monitor_role_arn }}
-> ```
+> **Note on the account id:** the `secrets:` block of a reusable workflow call is
+> evaluated in the calling file's context, which has no `environment`, so an
+> environment-scoped secret is empty there. Use a repository **variable** for the
+> account id, or build the ARN in a preceding job that declares the environment and
+> pass it through `needs.<job>.outputs.<key>`.
+
+`environment_name` makes the monitor job wait on the same environment protection rules
+as the deploy job, so a required approval or wait timer cannot let the monitor's five
+minute startup window expire before the deploy has started.
 
 ## Input reference
 
@@ -105,29 +121,35 @@ jobs:
 |---|---|---|---|
 | `stack_name` | string | required | CloudFormation stack name to monitor |
 | `aws_region` | string | required | AWS region |
-| `log_group_name` | string | `""` | CloudWatch log group name or prefix (leave empty to skip) |
-| `hang_threshold_minutes` | number | `10` | Hint to the AI: treat N minutes with no CF events as suspicious |
-| `poll_interval_seconds` | number | `120` | How often to poll and run AI analysis (seconds) |
-| `auto_cancel` | boolean | `false` | If true, AI verdict of CANCEL triggers `cancel-update-stack` |
-| `environment_name` | string | `""` | GitHub Actions environment for environment-scoped secrets |
+| `log_group_name` | string | `""` | CloudWatch log group name or prefix; the last lines are attached to a CANCEL comment (leave empty to skip) |
+| `hang_threshold_minutes` | number | `10` | Minutes with no CloudFormation event after which the update is judged hung |
+| `slow_resource_grace_minutes` | number | `20` | Replaces `hang_threshold_minutes` while only `slow_resource_types` are in flight |
+| `slow_resource_types` | string | ECS service, CloudFront distribution, ACM certificate, RDS instance and cluster | Space-separated CloudFormation resource types that get the longer grace |
+| `max_failed_tasks` | number | `3` | CANCEL once this many ECS tasks have stopped abnormally during the update; `0` disables |
+| `poll_interval_seconds` | number | `120` | How often to poll and evaluate (seconds) |
+| `auto_cancel` | boolean | `false` | If true, a CANCEL verdict on an `UPDATE_IN_PROGRESS` stack triggers `cancel-update-stack` |
+| `environment_name` | string | `""` | GitHub Actions environment for the monitor job |
 
 ## `auto_cancel` trade-offs
 
 | Setting | Behaviour |
 |---|---|
-| `false` (default) | Advisory mode: AI posts a commit comment on CANCEL but never cancels. Safe for initial rollout. |
-| `true` | Automatic: cancels the stack on AI CANCEL verdict, stopping the timeout. Requires `CdkDeployMonitorCancel` IAM bundle. |
+| `false` (default) | Advisory mode: a CANCEL verdict posts one commit comment and the monitor keeps polling. Safe for initial rollout. |
+| `true` | Automatic: a CANCEL verdict on an `UPDATE_IN_PROGRESS` stack cancels the update, stopping the timeout. Creates and rollbacks cannot be cancelled and fall back to the advisory comment. |
 
-Start with `auto_cancel: false` to validate AI judgements over a few real deploys before enabling `true`.
+Start with `auto_cancel: false`, read the per-poll verdict lines over a few real deploys,
+and tune `hang_threshold_minutes` or `slow_resource_grace_minutes` for your stack before
+enabling `true`. A stack whose updates routinely involve a slow resource type not in the
+default list (for example an OpenSearch domain) should add it to `slow_resource_types`.
 
 ## ECS task diagnostics
 
 The monitor automatically looks up the ECS service belonging to the monitored CloudFormation
-stack using `cloudformation:DescribeStackResources`. On each poll cycle it also fetches
-recently stopped ECS tasks (exit codes and stopped reasons) and includes them in the AI
-prompt. This lets the AI explain *why* a deployment is stuck — for example a missing
-environment variable, an OOM kill, or a failing health check — rather than just reporting
-that no CloudFormation events have occurred.
+stack using `cloudformation:DescribeStackResources`. On each poll cycle it fetches
+recently stopped ECS tasks and uses them twice: to count abnormal stops for the crash-loop
+rule, and to list the stopped reasons and exit codes in a CANCEL comment, so the reader
+sees *why* the deployment was stuck (a missing environment variable, an OOM kill, a
+failing health check) rather than just that it went quiet.
 
 No extra configuration is needed. The monitor silently skips ECS diagnostics if the stack
 contains no ECS service resource.
@@ -135,11 +157,11 @@ contains no ECS service resource.
 ## Log sensitivity warning
 
 **Do not set `log_group_name`** if your application logs may contain secrets, credentials,
-PII, or other sensitive data. Log content is sent to the GitHub Models API (Azure-hosted
-OpenAI service) and is also visible in the commit comment. When in doubt, omit the input.
+PII, or other sensitive data. The last lines are attached to the CANCEL commit comment,
+which is visible to everyone who can read the repository. When in doubt, omit the input.
 
-The same applies to ECS stopped task reasons — if task environment variables or startup
-errors may reveal sensitive information, be aware that this data is also sent to the AI.
+The same applies to ECS stopped task reasons: if startup errors may reveal sensitive
+information, be aware that they are quoted in the comment as well.
 
 ## Troubleshooting the deploy monitor
 
@@ -147,19 +169,21 @@ errors may reveal sensitive information, be aware that this data is also sent to
 If the stack was already in a terminal state (e.g. from a previous run), the monitor
 waits up to 5 minutes for the deploy to begin. If CDK has not started the CloudFormation
 update within that window, the monitor exits. Check the `Monitor and analyse` step log
-for `Initial stack status:` to confirm.
+for `Initial stack status:` to confirm. If the deploy job waits on an environment
+approval, pass the same environment through `environment_name`.
 
-**AI shows as unreachable:**
-Confirm the org has GitHub Copilot enabled and that `models: read` is declared in the
-calling workflow's top-level `permissions:` block. When the AI is unreachable, the
-monitor defaults to CONTINUE and keeps polling.
+**A healthy deploy was cancelled:**
+Read the `Verdict:` lines in the job log. If the stack was silent because of a slow
+resource type that is not in the default list, add it to `slow_resource_types`; if the
+whole deploy is simply slow, raise `hang_threshold_minutes`. If tasks were counted as
+abnormal stops during a legitimate restart, raise `max_failed_tasks` or set it to `0`.
 
 **Commit comment not posted:**
-Ensure the calling workflow has `contents: write` in its top-level `permissions:` block.
-Comments are only posted on CANCEL verdicts. CONTINUE verdicts are only logged to the
-job output.
+Ensure the calling workflow has `contents: write` in its `permissions:` block for the
+monitor job and for every parent job in the call chain. Comments are only posted on
+CANCEL verdicts. CONTINUE verdicts are only logged to the job output.
 
 **`cancel-update-stack` fails:**
-The stack may have already reached a terminal state between the AI verdict and the cancel
-call -- this is harmless. Check the commit comment for the error detail. Also verify the
-OIDC role includes `CancelUpdateStack` via the `CdkDeployMonitorCancel` permission bundle.
+The stack may have already reached a terminal state between the verdict and the cancel
+call, which is harmless. Check the commit comment for the error detail. Also verify the
+OIDC role includes `CancelUpdateStack` via the `CdkDeployMonitor` permission bundle.

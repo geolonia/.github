@@ -1,6 +1,6 @@
 {
   "name": "CDK Deploy Monitor",
-  "description": "Detects hanging CloudFormation stack updates during CDK deploys. Uses GitHub Models AI to diagnose whether the deployment is stuck, posts a commit comment with the verdict, and optionally cancels the update.",
+  "description": "Detects hanging CloudFormation stack updates during CDK deploys. Applies a deterministic rule (silence past a threshold, a longer grace for slow resource types, or a crash-looping ECS task definition), posts a commit comment with the verdict, and optionally cancels the update.",
   "iconName": "shield",
   "categories": ["Deployment", "Monitoring"],
   "filePatterns": [".github/workflows/deploy*.yml", ".github/workflows/*deploy*.yml"]

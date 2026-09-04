@@ -17,17 +17,32 @@ on:
         required: false
         default: ""
       hang_threshold_minutes:
-        description: "Minutes with no new CloudFormation events considered suspicious; passed to the AI as context"
+        description: "Minutes with no new CloudFormation event after which the update is judged hung and CANCEL is issued (unless only slow resource types are in flight, see slow_resource_grace_minutes)"
         type: number
         required: false
         default: 10
+      slow_resource_grace_minutes:
+        description: "Replaces hang_threshold_minutes while every in-flight resource is one of slow_resource_types, which legitimately stay silent for a long time (ECS waiting for healthy tasks, CloudFront propagating, ACM validating)"
+        type: number
+        required: false
+        default: 20
+      slow_resource_types:
+        description: "Space-separated CloudFormation resource types that get slow_resource_grace_minutes instead of hang_threshold_minutes"
+        type: string
+        required: false
+        default: "AWS::ECS::Service AWS::CloudFront::Distribution AWS::CertificateManager::Certificate AWS::RDS::DBInstance AWS::RDS::DBCluster"
+      max_failed_tasks:
+        description: "CANCEL as soon as this many ECS tasks have stopped abnormally (not drained by the deployment) since the update started, regardless of silence; 0 disables the check"
+        type: number
+        required: false
+        default: 3
       poll_interval_seconds:
-        description: "How often to poll and run AI analysis (seconds)"
+        description: "How often to poll CloudFormation and evaluate the verdict (seconds)"
         type: number
         required: false
         default: 120
       auto_cancel:
-        description: "Whether an AI verdict of CANCEL triggers cancel-update-stack (default: false = advisory only)"
+        description: "Whether a CANCEL verdict triggers cancel-update-stack (default: false = advisory only, comment is still posted)"
         type: boolean
         required: false
         default: false
@@ -41,12 +56,11 @@ on:
         description: "OIDC IAM role ARN with cloudformation:DescribeStacks, DescribeStackEvents, DescribeStackResources, CancelUpdateStack, logs:FilterLogEvents, DescribeLogGroups, ecs:ListTasks, DescribeTasks permissions (see CdkDeployMonitor permission bundle)"
         required: true
 
-# All three are used by the monitor (it is not over-granted): a caller that
-# downscopes any of these will silently disable that capability.
+# Both are used by the monitor (it is not over-granted): a caller that
+# downscopes contents will silently lose the commit comments.
 permissions:
   id-token: write # OIDC: assume the monitor role (CloudFormation / ECS / logs)
   contents: write # post deploy-status commit comments
-  models: read # GitHub Models: AI analysis of deploy progress
 
 jobs:
   monitor:
@@ -67,6 +81,9 @@ jobs:
           AWS_REGION: ${{ inputs.aws_region }}
           LOG_GROUP_NAME: ${{ inputs.log_group_name }}
           HANG_THRESHOLD_MINUTES: ${{ inputs.hang_threshold_minutes }}
+          SLOW_RESOURCE_GRACE_MINUTES: ${{ inputs.slow_resource_grace_minutes }}
+          SLOW_RESOURCE_TYPES: ${{ inputs.slow_resource_types }}
+          MAX_FAILED_TASKS: ${{ inputs.max_failed_tasks }}
           POLL_INTERVAL_SECONDS: ${{ inputs.poll_interval_seconds }}
           AUTO_CANCEL: ${{ inputs.auto_cancel }}
           GH_TOKEN: ${{ github.token }}
@@ -88,7 +105,9 @@ jobs:
 
           echo "Monitoring stack: $STACK_NAME"
           echo "Poll interval: ${POLL_INTERVAL_SECONDS}s"
-          echo "Hang hint for AI: ${HANG_THRESHOLD_MINUTES}m with no CF events"
+          echo "Hang threshold: ${HANG_THRESHOLD_MINUTES}m with no CF events (${SLOW_RESOURCE_GRACE_MINUTES}m while only slow resources are in flight)"
+          echo "Slow resource types: ${SLOW_RESOURCE_TYPES}"
+          echo "Abnormal ECS task stops before CANCEL: ${MAX_FAILED_TASKS} (0 = disabled)"
 
           # Resolve log group name once (prefix → actual name)
           RESOLVED_LOG_GROUP=""
@@ -108,7 +127,8 @@ jobs:
 
           # Look up ECS service and cluster from the CloudFormation stack resources.
           # This allows the monitor to fetch stopped task diagnostics (exit codes,
-          # stopped reasons) without needing them passed as explicit inputs.
+          # stopped reasons) without needing them passed as explicit inputs. They
+          # feed the crash-loop check and the CANCEL comment.
           ECS_SERVICE_ARN=""
           ECS_CLUSTER=""
           CF_RESOURCES=$(aws cloudformation describe-stack-resources \
@@ -192,8 +212,8 @@ jobs:
             CF_EVENTS=$(aws cloudformation describe-stack-events \
               --stack-name "$STACK_NAME" \
               --region "$AWS_REGION" \
-              --max-items 20 \
-              --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Resource:LogicalResourceId,Reason:ResourceStatusReason}' \
+              --max-items 50 \
+              --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Type:ResourceType,Resource:LogicalResourceId,Reason:ResourceStatusReason}' \
               --output json 2>/dev/null || echo "[]")
 
             # Calculate time since last CF event
@@ -217,10 +237,9 @@ jobs:
                 --output text 2>/dev/null | tail -50 || echo "")
             fi
 
-            # Fetch recently stopped ECS tasks for failure diagnostics.
-            # Stopped tasks contain the reason the container exited (e.g. missing
-            # env variable, OOM, health check failure) which the AI can use to
-            # explain why a deployment is not progressing.
+            # Fetch recently stopped ECS tasks. Their stopped reasons and exit codes
+            # (missing env variable, OOM, failed health check) drive the crash-loop
+            # check and explain a CANCEL in the commit comment.
             ECS_STOPPED_TASKS=""
             if [[ -n "$ECS_SERVICE_ARN" && -n "$ECS_CLUSTER" ]]; then
               STOPPED_TASK_ARNS=$(aws ecs list-tasks \
@@ -228,7 +247,7 @@ jobs:
                 --service-name "$ECS_SERVICE_ARN" \
                 --desired-status STOPPED \
                 --region "$AWS_REGION" \
-                --query 'taskArns[:5]' \
+                --query 'taskArns[:20]' \
                 --output json 2>/dev/null || echo "[]")
               if [[ "$(echo "$STOPPED_TASK_ARNS" | jq 'length')" -gt 0 ]]; then
                 ECS_STOPPED_TASKS=$(aws ecs describe-tasks \
@@ -240,64 +259,98 @@ jobs:
               fi
             fi
 
-            # Build AI prompt
-            CF_EVENTS_TRIMMED=$(echo "$CF_EVENTS" | head -c 4000)
-            PROMPT="Stack: $STACK_NAME ($STACK_STATUS)"$'\n'
-            PROMPT+="Minutes since last CloudFormation event: $MINUTES_SINCE_EVENT"$'\n'
-            PROMPT+="Operator hang threshold: ${HANG_THRESHOLD_MINUTES} minutes with no CF events"$'\n\n'
-            PROMPT+="Recent CloudFormation events (newest first):"$'\n'"$CF_EVENTS_TRIMMED"
-            if [[ -n "$CW_LOGS" ]]; then
-              CW_LOGS_TRIMMED=$(echo "$CW_LOGS" | head -c 3000)
-              PROMPT+=$'\n\n'"Recent application logs (last ~${POLL_INTERVAL_SECONDS}s):"$'\n'"$CW_LOGS_TRIMMED"
+            # Decide deterministically. GitHub Models, which used to judge this, was
+            # retired on 2026-07-30; the rule below encodes what the prompt asked of
+            # it. Silence alone is normal while slow resources are in flight (an ECS
+            # service waiting for new tasks to pass health checks, a CloudFront
+            # distribution propagating, an ACM certificate validating). Silence past
+            # the threshold on anything else, or a container that keeps dying, is a
+            # hang, and waiting for the six-hour Actions timeout helps nobody.
+
+            # Events belonging to this deploy: everything since the stack's own most
+            # recent *_IN_PROGRESS event (the "User Initiated" marker). Falls back to
+            # every fetched event when that marker has scrolled out of the window.
+            DEPLOY_START_TS=$(echo "$CF_EVENTS" | jq -r --arg s "$STACK_NAME" \
+              '[.[] | select(.Resource == $s and (.Status | endswith("IN_PROGRESS")))] | (max_by(.Time) | .Time) // empty')
+            DEPLOY_EVENTS=$(echo "$CF_EVENTS" | jq -c --arg t "${DEPLOY_START_TS:-}" \
+              '[.[] | select($t == "" or .Time >= $t)]')
+
+            # Resources still in flight: the newest event per logical id, kept when
+            # that status is *_IN_PROGRESS. The stack itself is excluded.
+            IN_FLIGHT=$(echo "$DEPLOY_EVENTS" | jq -c --arg s "$STACK_NAME" \
+              '[group_by(.Resource)[] | max_by(.Time) | select(.Resource != $s and (.Status | endswith("IN_PROGRESS")))]')
+            IN_FLIGHT_SUMMARY=$(echo "$IN_FLIGHT" | jq -r '.[] | "\(.Resource) (\(.Type))"' | paste -sd ',' - | sed 's/,/, /g')
+
+            # Every in-flight resource is of a type that legitimately stays silent for
+            # a long time: apply the longer grace instead of the hang threshold.
+            SLOW_ONLY=$(echo "$IN_FLIGHT" | jq -r --arg slow "$SLOW_RESOURCE_TYPES" \
+              'if length == 0 then "false" else (($slow | split(" ") | map(select(. != ""))) as $ok | [.[] | .Type] | all(. as $t | $ok | index($t) != null) | tostring) end')
+            EFFECTIVE_THRESHOLD=$HANG_THRESHOLD_MINUTES
+            if [[ "$SLOW_ONLY" == "true" && "$SLOW_RESOURCE_GRACE_MINUTES" -gt "$HANG_THRESHOLD_MINUTES" ]]; then
+              EFFECTIVE_THRESHOLD=$SLOW_RESOURCE_GRACE_MINUTES
             fi
+
+            # Crash loop: tasks that stopped during this deploy for any reason other
+            # than being drained by the deployment itself. Drained tasks report
+            # "Scaling activity initiated by (deployment ...)"; everything else
+            # (essential container exited, OOM, failed ELB health checks, image pull
+            # or init errors) means the new task definition is not becoming healthy.
+            FAILED_TASK_COUNT=0
+            FAILED_TASK_SUMMARY=""
             if [[ -n "$ECS_STOPPED_TASKS" && "$ECS_STOPPED_TASKS" != "[]" ]]; then
-              ECS_TRIMMED=$(echo "$ECS_STOPPED_TASKS" | head -c 2000)
-              PROMPT+=$'\n\n'"Recently stopped ECS tasks (exit codes and reasons):"$'\n'"$ECS_TRIMMED"
+              FAILED_TASKS=$(echo "$ECS_STOPPED_TASKS" | jq -c --arg t "${DEPLOY_START_TS:-}" \
+                '[.[] | select($t == "" or ((.stoppedAt // "") >= $t))
+                     | select((.stoppedReason // "") | test("Scaling activity initiated|stopped by deployment"; "i") | not)]')
+              FAILED_TASK_COUNT=$(echo "$FAILED_TASKS" | jq 'length')
+              FAILED_TASK_SUMMARY=$(echo "$FAILED_TASKS" | jq -r \
+                '.[] | "- \(.stoppedAt // "?"): \(.stoppedReason // "no reason") [exit codes: \([.containers[]? | (.exitCode // "none") | tostring] | join(","))]"' | head -5)
             fi
 
-            # Call AI
-            REQUEST_BODY=$(jq -n \
-              --arg prompt "$PROMPT" \
-              '{model:"gpt-4o",messages:[
-                {role:"system",content:"You are a senior DevOps engineer monitoring an AWS CloudFormation/ECS deployment in real time. You see the stack status, recent CloudFormation events, and recent application logs on every check. Be concise and decisive.\n\nKey rules:\n- ECS rolling deploys normally produce NO CloudFormation events for 10-20 minutes while waiting for new tasks to pass health checks. This is expected behaviour — do NOT treat silence alone as stuck.\n- Only recommend CANCEL if the minutes since last CF event have clearly exceeded the operator hang threshold, OR if there is a definitive unrecoverable error (e.g. missing secret, OOM, crash loop with no fix possible).\n- Transient ELB health check failures on newly started tasks are normal during a rolling deploy startup window. Do not cancel based on these alone."},
-                {role:"user",content:("Is this deployment progressing normally, or is it stuck/failing and needs to be cancelled?\n\n" + $prompt + "\n\nReply with CONTINUE or CANCEL on the first line, followed by one sentence explaining why.")}
-              ],max_tokens:150}')
-
-            RESPONSE=$(curl -sf \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://models.inference.ai.azure.com/chat/completions" \
-              -d "$REQUEST_BODY" 2>/dev/null || echo '{}')
-
-            AI_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // ""' 2>/dev/null || echo "")
-            if [[ -z "$AI_TEXT" ]]; then
-              echo "AI unreachable -- defaulting to CONTINUE."
-              sleep "$POLL_INTERVAL_SECONDS"
-              continue
+            VERDICT="CONTINUE"
+            REASON=""
+            if [[ "$MAX_FAILED_TASKS" -gt 0 && "$FAILED_TASK_COUNT" -ge "$MAX_FAILED_TASKS" ]]; then
+              VERDICT="CANCEL"
+              REASON="${FAILED_TASK_COUNT} ECS tasks stopped abnormally since the update started (limit ${MAX_FAILED_TASKS}); the new task definition is not becoming healthy."
+            elif [[ "$MINUTES_SINCE_EVENT" -ge "$EFFECTIVE_THRESHOLD" ]]; then
+              VERDICT="CANCEL"
+              REASON="No CloudFormation event for ${MINUTES_SINCE_EVENT} minutes (threshold ${EFFECTIVE_THRESHOLD})."
+              [[ "$SLOW_ONLY" == "true" ]] && REASON+=" The slow-resource grace was already applied."
             fi
+            echo "Verdict: ${VERDICT} -- silent ${MINUTES_SINCE_EVENT}m of ${EFFECTIVE_THRESHOLD}m allowed; in flight: ${IN_FLIGHT_SUMMARY:-none reported}; abnormal task stops: ${FAILED_TASK_COUNT}"
+            [[ -n "$REASON" ]] && echo "Reason: ${REASON}"
 
-            VERDICT=$(echo "$AI_TEXT" | head -1 | tr '[:lower:]' '[:upper:]' | grep -oE '^(CONTINUE|CANCEL)' || echo "CONTINUE")
-            echo "AI verdict: $VERDICT -- $AI_TEXT"
-
-            if [[ "$VERDICT" == "CANCEL" ]]; then
+            if [[ "$VERDICT" == "CANCEL" && "$CANCEL_ISSUED" != "true" ]]; then
               CANCEL_ISSUED=true
               COMMENT_BODY="### CDK Deploy Monitor"$'\n\n'
               COMMENT_BODY+="**Stack:** \`$STACK_NAME\` | **Status:** \`$STACK_STATUS\`"$'\n'
-              COMMENT_BODY+="**No new CF events for:** ${MINUTES_SINCE_EVENT} minutes"$'\n\n'
-              COMMENT_BODY+="**AI Verdict:** \`CANCEL\`"$'\n\n'"${AI_TEXT}"$'\n\n'
-              COMMENT_BODY+="---"$'\n'"*Posted by [reusable-cdk-deploy-monitor](https://github.com/geolonia/.github/blob/main/.github/workflows/reusable-cdk-deploy-monitor.yml)*"
+              COMMENT_BODY+="**No new CF events for:** ${MINUTES_SINCE_EVENT} minutes (threshold ${EFFECTIVE_THRESHOLD})"$'\n'
+              COMMENT_BODY+="**In flight:** ${IN_FLIGHT_SUMMARY:-none reported}"$'\n\n'
+              COMMENT_BODY+="**Verdict:** \`CANCEL\`"$'\n\n'"${REASON}"$'\n'
+              if [[ -n "$FAILED_TASK_SUMMARY" ]]; then
+                COMMENT_BODY+=$'\n'"Abnormally stopped ECS tasks:"$'\n'"${FAILED_TASK_SUMMARY}"$'\n'
+              fi
+              if [[ -n "$CW_LOGS" ]]; then
+                COMMENT_BODY+=$'\n'"<details><summary>Recent application logs</summary>"$'\n\n'"\`\`\`"$'\n'"$(echo "$CW_LOGS" | tail -20 | head -c 3000)"$'\n'"\`\`\`"$'\n'"</details>"$'\n'
+              fi
+              COMMENT_BODY+=$'\n'"---"$'\n'"*Posted by [reusable-cdk-deploy-monitor](https://github.com/geolonia/.github/blob/main/.github/workflows/reusable-cdk-deploy-monitor.yml)*"
 
               gh api "repos/$REPO/commits/$SHA/comments" \
                 -f body="$COMMENT_BODY" 2>/dev/null || echo "Warning: failed to post commit comment"
 
-              if [[ "$AUTO_CANCEL" == "true" ]]; then
+              if [[ "$AUTO_CANCEL" != "true" ]]; then
+                echo "auto_cancel=false -- advisory comment posted, continuing to monitor."
+              elif [[ "$STACK_STATUS" != "UPDATE_IN_PROGRESS" ]]; then
+                # cancel-update-stack only applies to an in-progress update. A create
+                # or a rollback has to run its course; the comment is the alert.
+                echo "Stack is ${STACK_STATUS}, which cannot be cancelled -- advisory comment posted, continuing to monitor."
+              else
                 echo "Cancelling stack update: $STACK_NAME"
                 if aws cloudformation cancel-update-stack \
                   --stack-name "$STACK_NAME" \
                   --region "$AWS_REGION" 2>/tmp/cancel_error; then
                   echo "Stack update cancelled. CloudFormation is rolling back."
                   gh api "repos/$REPO/commits/$SHA/comments" \
-                    -f body="### CDK Deploy Monitor -- Update Cancelled"$'\n\n'"Stack \`$STACK_NAME\` update was cancelled (AI verdict: CANCEL, auto_cancel: true)."$'\n'"CloudFormation is rolling back. The deploy job will fail with a rollback error -- this is expected." \
+                    -f body="### CDK Deploy Monitor -- Update Cancelled"$'\n\n'"Stack \`$STACK_NAME\` update was cancelled (verdict: CANCEL, auto_cancel: true)."$'\n'"CloudFormation is rolling back. The deploy job will fail with a rollback error -- this is expected." \
                     2>/dev/null || true
                 else
                   CANCEL_ERR=$(cat /tmp/cancel_error 2>/dev/null || echo "unknown error")
@@ -307,8 +360,6 @@ jobs:
                     2>/dev/null || true
                 fi
                 exit 1
-              else
-                echo "auto_cancel=false -- advisory comment posted, continuing to monitor."
               fi
             fi
 
