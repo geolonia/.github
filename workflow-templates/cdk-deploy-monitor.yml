@@ -13,13 +13,9 @@
 #
 #   id-token: write  hard failure. The OIDC role assume errors and the job fails.
 #   contents: write  silent. Commit comments are skipped with a warning in the log.
-#   models: read     silent. The AI check logs "AI unreachable" and defaults to
-#                    CONTINUE, so the monitor keeps polling but no longer
-#                    analyses anything.
 #
-# The two silent modes are the dangerous ones: the job still goes green, so a
-# narrowed block looks fine and you quietly lose the monitoring this workflow
-# exists to provide.
+# The silent mode is the dangerous one: the job still goes green, so a narrowed
+# block looks fine and you quietly lose the alert this workflow exists to post.
 
 jobs:
   # ... your existing deploy job here ...
@@ -29,13 +25,15 @@ jobs:
     permissions:
       id-token: write # OIDC: assume the monitor role (CloudFormation / ECS / logs)
       contents: write # post deploy-status commit comments
-      models: read # GitHub Models: AI analysis of deploy progress
     uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@a7f7ab930920429ec1ea9373ae7325fb769edfcc # v1.37.0
     with:
       stack_name: MyAppStack        # CloudFormation stack name
       aws_region: ap-northeast-1   # AWS region
       # log_group_name: "MyAppStack-MyLogGroup*"  # Optional: CloudWatch log group prefix
-      # hang_threshold_minutes: 10                # Optional: default 10
+      # hang_threshold_minutes: 10                # Optional: default 10, silence before CANCEL
+      # slow_resource_grace_minutes: 20           # Optional: default 20, while only ECS/CloudFront/ACM/RDS are in flight
+      # slow_resource_types: "AWS::ECS::Service AWS::CloudFront::Distribution AWS::CertificateManager::Certificate AWS::RDS::DBInstance AWS::RDS::DBCluster"  # Optional: types that get the grace
+      # max_failed_tasks: 3                       # Optional: default 3, abnormal ECS task stops before CANCEL
       # auto_cancel: false                        # Optional: set true to enable auto-cancel
     secrets:
       aws_role_arn: ${{ secrets.CDK_DEPLOY_ROLE_ARN }}
