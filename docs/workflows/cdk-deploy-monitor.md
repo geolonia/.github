@@ -4,8 +4,9 @@ Runs as a parallel job alongside a CDK deploy. On every poll cycle it fetches th
 CloudFormation stack status and recent events, the resources still in flight, recently
 stopped ECS tasks (exit codes and stopped reasons) and, optionally, recent CloudWatch
 logs, then applies a deterministic rule to decide whether the update is progressing or
-hung. A CANCEL verdict is posted once as a commit comment. If `auto_cancel` is enabled
-and the stack is in `UPDATE_IN_PROGRESS`, the workflow also calls
+hung. A CANCEL verdict is posted once as a commit comment (retried on later polls if
+GitHub was unreachable). If `auto_cancel` is enabled and the stack is in
+`UPDATE_IN_PROGRESS`, the workflow also calls
 `cancel-update-stack`, triggering a rollback so the deploy job fails cleanly instead of
 sitting in the six-hour Actions timeout.
 
@@ -19,15 +20,22 @@ GH Actions timeouts due to hanging CloudFormation updates.
 
 ## How the verdict is decided
 
-On each poll the monitor computes:
+The update's start time is the stack's `LastUpdatedTime` (`CreationTime` for a first
+deploy), read once. On each poll the monitor then computes:
 
 - **Minutes since the last CloudFormation event** for the stack.
-- **Resources in flight**: for each logical resource touched by the current update, its
-  newest event; the resource counts as in flight while that status is `*_IN_PROGRESS`.
+- **Resources in flight**: every resource whose current status, from
+  `describe-stack-resources`, is `*_IN_PROGRESS`. This is read from the resource list, not
+  inferred from a page of events, so a busy update cannot hide a slow resource.
 - **Abnormally stopped ECS tasks** since the update started: stopped tasks whose reason
   is anything other than being drained by the deployment (`Scaling activity initiated by
   (deployment ...)`). Essential container exits, OOM kills, failed ELB health checks and
-  image pull or init errors all count.
+  image pull or init errors all count. The whole `ListTasks` page (100 tasks) is
+  inspected and filtered by stop time.
+
+A poll on which CloudFormation cannot be read produces no verdict. Three consecutive
+failed reads stop the monitor with an error, so an outage or a permissions problem is
+never mistaken for a healthy CONTINUE.
 
 Then, in this order:
 
@@ -38,7 +46,8 @@ Then, in this order:
    **CANCEL**, with one exception: while *every* in-flight resource is one of
    `slow_resource_types` (by default ECS services, CloudFront distributions, ACM
    certificates and RDS instances or clusters, all of which legitimately produce no
-   events for a long time), `slow_resource_grace_minutes` applies instead.
+   events for a long time), `slow_resource_grace_minutes` replaces the threshold
+   outright, whether it is higher or lower.
 3. Otherwise the verdict is **CONTINUE**.
 
 Every poll logs the verdict together with the silence so far, the effective threshold,
@@ -123,7 +132,7 @@ minute startup window expire before the deploy has started.
 | `aws_region` | string | required | AWS region |
 | `log_group_name` | string | `""` | CloudWatch log group name or prefix; the last lines are attached to a CANCEL comment (leave empty to skip) |
 | `hang_threshold_minutes` | number | `10` | Minutes with no CloudFormation event after which the update is judged hung |
-| `slow_resource_grace_minutes` | number | `20` | Replaces `hang_threshold_minutes` while only `slow_resource_types` are in flight |
+| `slow_resource_grace_minutes` | number | `20` | Replaces `hang_threshold_minutes` (even when lower) while only `slow_resource_types` are in flight |
 | `slow_resource_types` | string | ECS service, CloudFront distribution, ACM certificate, RDS instance and cluster | Space-separated CloudFormation resource types that get the longer grace |
 | `max_failed_tasks` | number | `3` | CANCEL once this many ECS tasks have stopped abnormally during the update; `0` disables |
 | `poll_interval_seconds` | number | `120` | How often to poll and evaluate (seconds) |
@@ -181,7 +190,14 @@ abnormal stops during a legitimate restart, raise `max_failed_tasks` or set it t
 **Commit comment not posted:**
 Ensure the calling workflow has `contents: write` in its `permissions:` block for the
 monitor job and for every parent job in the call chain. Comments are only posted on
-CANCEL verdicts. CONTINUE verdicts are only logged to the job output.
+CANCEL verdicts. CONTINUE verdicts are only logged to the job output. A transient GitHub
+failure is retried on the next two polls; if the comment still cannot be posted the job
+ends with an error annotation saying so.
+
+**Monitor stops with `Could not read CloudFormation`:**
+Three consecutive polls failed to read the stack. Check the OIDC role's
+`cloudformation:DescribeStacks`, `DescribeStackEvents` and `DescribeStackResources`
+permissions and the region input; the first failed read is logged with the AWS error.
 
 **`cancel-update-stack` fails:**
 The stack may have already reached a terminal state between the verdict and the cancel

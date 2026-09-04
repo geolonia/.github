@@ -32,6 +32,7 @@ jobs:
       # log_group_name: "MyAppStack-MyLogGroup*"  # Optional: CloudWatch log group prefix
       # hang_threshold_minutes: 10                # Optional: default 10, silence before CANCEL
       # slow_resource_grace_minutes: 20           # Optional: default 20, while only ECS/CloudFront/ACM/RDS are in flight
+      # slow_resource_types: "AWS::ECS::Service AWS::CloudFront::Distribution AWS::CertificateManager::Certificate AWS::RDS::DBInstance AWS::RDS::DBCluster"  # Optional: types that get the grace
       # max_failed_tasks: 3                       # Optional: default 3, abnormal ECS task stops before CANCEL
       # auto_cancel: false                        # Optional: set true to enable auto-cancel
     secrets:
