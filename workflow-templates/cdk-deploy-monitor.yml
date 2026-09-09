@@ -25,7 +25,7 @@ jobs:
     permissions:
       id-token: write # OIDC: assume the monitor role (CloudFormation / ECS / logs)
       contents: write # post deploy-status commit comments
-    uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@a7f7ab930920429ec1ea9373ae7325fb769edfcc # v1.37.0
+    uses: geolonia/.github/.github/workflows/reusable-cdk-deploy-monitor.yml@d358a3671a70cfeea147c0c050c6479c8d2683ad # v1.39.1
     with:
       stack_name: MyAppStack        # CloudFormation stack name
       aws_region: ap-northeast-1   # AWS region
