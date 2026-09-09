@@ -66,13 +66,23 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob # no templates -> empty loop, not a literal glob
-          # Target: the newest release. On a tag push the release may not exist
-          # yet (the release workflow runs concurrently), so take the pushed
-          # tag itself, but never move pins backwards if a lower tag is pushed
-          # (a patch on an older line). Other triggers use the latest release.
-          LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            LATEST_TAG="$(printf '%s\n' "${LATEST_TAG}" "${GITHUB_REF_NAME}" | sort -V | tail -n 1)"
+          # Target: the newest release. On a release-tag push the release may
+          # not exist yet (the release workflow runs concurrently), so take the
+          # pushed tag itself, but never move pins backwards if a lower tag is
+          # pushed (a patch on an older line). Only a push qualifies: a manual
+          # dispatch pointed at a tag must still follow the latest release.
+          # Other triggers use the latest release and fail if there is none.
+          if [[ "${GITHUB_EVENT_NAME}" == "push" &&
+                "${GITHUB_REF_TYPE}" == "tag" &&
+                "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            LATEST_TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+            if [[ -z "${LATEST_TAG}" ]]; then
+              LATEST_TAG="${GITHUB_REF_NAME}"
+            else
+              LATEST_TAG="$(printf '%s\n' "${LATEST_TAG}" "${GITHUB_REF_NAME}" | sort -V | tail -n 1)"
+            fi
+          else
+            LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
           fi
           RELEASE_SHA="$(git rev-list -n 1 "refs/tags/${LATEST_TAG}")"
           export LATEST_TAG RELEASE_SHA
