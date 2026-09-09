@@ -16,6 +16,15 @@ name: Sync workflow-template pins
 # untouched by design.
 
 on:
+  # Run right after every release tag is pushed, so the templates follow a new
+  # release within minutes instead of waiting for the weekly sweep. The release
+  # itself is created by a workflow (GITHUB_TOKEN), so a `release` event would
+  # never fire here; the human tag push does. The weekly run stays as a
+  # backstop (a sync PR that was closed unmerged, a tag pushed while Actions
+  # was down).
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   schedule:
     - cron: '17 6 * * 1' # weekly, Monday 06:17 UTC
   workflow_dispatch:
@@ -44,6 +53,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Always work from main, even when a tag push triggered the run, so
+          # the sync PR is based on main rather than on the tagged commit.
+          ref: main
           persist-credentials: false
           fetch-depth: 0 # need tags to resolve the latest release SHA
 
@@ -54,7 +66,14 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob # no templates -> empty loop, not a literal glob
+          # Target: the newest release. On a tag push the release may not exist
+          # yet (the release workflow runs concurrently), so take the pushed
+          # tag itself, but never move pins backwards if a lower tag is pushed
+          # (a patch on an older line). Other triggers use the latest release.
           LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            LATEST_TAG="$(printf '%s\n' "${LATEST_TAG}" "${GITHUB_REF_NAME}" | sort -V | tail -n 1)"
+          fi
           RELEASE_SHA="$(git rev-list -n 1 "refs/tags/${LATEST_TAG}")"
           export LATEST_TAG RELEASE_SHA
           # Rewrite `geolonia/.github/.github/workflows/reusable-*.yml@<sha> # vX.Y.Z`
