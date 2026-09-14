@@ -1,16 +1,23 @@
 name: Sync Team Access
 
+# Nudges the central team-access sync in geolonia-operations after
+# catalog-info.yaml changes on the default branch, so the declared owner and
+# accessGrants are applied within minutes instead of at the nightly run.
+# The central sync reads catalog-info.yaml from this repository's default
+# branch itself; nothing sent from here can grant access.
+
 on:
   push:
     branches: [main]
     paths: ['catalog-info.yaml']
+  # Re-run the sync by hand (Actions -> Sync Team Access -> Run workflow).
+  # Runs from any branch other than the default branch are skipped.
+  workflow_dispatch:
 
-# Explicit least-privilege ceiling: the reusable only reads catalog-info.yaml
-# and dispatches via an App token, so the caller token needs no more than
-# contents: read (avoids the repo-default token, which zizmor flags as
-# excessive-permissions).
-permissions:
-  contents: read
+# Explicit least-privilege ceiling: the reusable only sends a dispatch via an
+# App token, so the caller token needs nothing (avoids the repo-default token,
+# which zizmor flags as excessive-permissions).
+permissions: {}
 
 jobs:
   sync:
