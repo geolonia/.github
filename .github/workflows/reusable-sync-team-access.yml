@@ -1,17 +1,18 @@
-name: "[REUSABLE] Sync Team Access - Dispatch"
+name: "[REUSABLE] Sync Team Access - Nudge"
 
-# This workflow reads catalog-info.yaml and dispatches a sync request to a
-# centralized repository that holds the org-level credentials. Individual repos
-# never see the org-admin token.
+# Tells the central team-access sync in geolonia-operations that this
+# repository's catalog-info.yaml changed. The payload carries only the
+# repository name: the central workflow fetches catalog-info.yaml from the
+# repository's default branch itself and decides what to apply, so nothing a
+# caller sends can grant access. Individual repositories never see the
+# org-level token.
+#
+# Without this nudge the change is still picked up by the nightly fleet run
+# in geolonia-operations; the nudge only makes it immediate.
 
 on:
   workflow_call:
     inputs:
-      catalog_info_path:
-        description: "Path to catalog-info.yaml in the repository"
-        type: string
-        required: false
-        default: "catalog-info.yaml"
       dispatch_repo:
         description: "Repository that processes sync requests (owner/repo)"
         type: string
@@ -25,49 +26,18 @@ on:
         description: "Operations-Geolonia GitHub App private key"
         required: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   dispatch:
-    name: Parse catalog-info.yaml and dispatch sync request
+    name: Nudge the central team-access sync
     runs-on: ubuntu-latest
+    # Only the default branch is reviewed and only the default branch is
+    # what the central sync reads, so a run from any other ref (a manual run
+    # on a feature branch, a misconfigured caller) has nothing to nudge.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # This job only reads catalog-info.yaml and dispatches via an App
-          # token; it never uses the checkout credentials for git, so do not
-          # leave them on disk (zizmor artipacked).
-          persist-credentials: false
-
-      - name: Install yq
-        uses: mikefarah/yq@c14f446382944492701b16c1ddb48bb9dbe683e3 # v4.53.6
-
-      - name: Parse catalog-info.yaml
-        id: parse
-        shell: bash
-        env:
-          CATALOG_PATH: ${{ inputs.catalog_info_path }}
-        run: |
-          if [ ! -f "$CATALOG_PATH" ]; then
-            echo "::error::$CATALOG_PATH not found"
-            exit 1
-          fi
-
-          # Extract owner team (keep full Backstage ref for the central processor)
-          RAW_OWNER=$(yq '.spec.owner' "$CATALOG_PATH")
-          if [ -z "$RAW_OWNER" ] || [ "$RAW_OWNER" = "null" ]; then
-            echo "::error::spec.owner is not set in $CATALOG_PATH"
-            exit 1
-          fi
-          echo "owner=$RAW_OWNER" >> "$GITHUB_OUTPUT"
-
-          # Extract access grants as compact JSON
-          GRANTS=$(yq -o=json -I=0 '.spec.accessGrants // []' "$CATALOG_PATH")
-          echo "grants=$GRANTS" >> "$GITHUB_OUTPUT"
-
       - name: Resolve dispatch target repo name
         id: target
         env:
@@ -75,14 +45,16 @@ jobs:
           REPO_OWNER: ${{ github.repository_owner }}
         shell: bash
         run: |
-          if [ -n "$DISPATCH_REPO" ]; then
-            # Extract repo name from owner/repo format
-            REPO_NAME="${DISPATCH_REPO##*/}"
-          else
-            REPO_NAME="geolonia-operations"
+          set -euo pipefail
+          FULL="${DISPATCH_REPO:-${REPO_OWNER}/geolonia-operations}"
+          if [[ ! "$FULL" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::invalid dispatch_repo '$FULL'"
+            exit 1
           fi
-          echo "repo_name=$REPO_NAME" >> "$GITHUB_OUTPUT"
-          echo "full=${DISPATCH_REPO:-${REPO_OWNER}/geolonia-operations}" >> "$GITHUB_OUTPUT"
+          {
+            echo "repo_name=${FULL##*/}"
+            echo "full=$FULL"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Generate dispatch token
         id: app_token
@@ -103,27 +75,23 @@ jobs:
           TARGET: ${{ steps.target.outputs.full }}
           REPO_FULL: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
-          OWNER: ${{ steps.parse.outputs.owner }}
-          GRANTS: ${{ steps.parse.outputs.grants }}
+          REF_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
-
-          # Build the full request body with client_payload as an object
-          REQUEST_BODY=$(jq -n \
+          set -euo pipefail
+          # source_repo is the only field the central sync reads; the rest is
+          # informational for the run log.
+          jq -n \
             --arg repo "$REPO_FULL" \
             --arg sha "$COMMIT_SHA" \
-            --arg owner "$OWNER" \
-            --argjson grants "$GRANTS" \
+            --arg ref "$REF_NAME" \
             '{
               event_type: "sync-team-access",
               client_payload: {
                 source_repo: $repo,
                 commit_sha: $sha,
-                spec_owner: $owner,
-                access_grants: $grants
+                ref: $ref
               }
-            }')
+            }' | gh api "repos/${TARGET}/dispatches" --input -
 
-          echo "$REQUEST_BODY" | gh api "repos/${TARGET}/dispatches" --input -
-
-          echo "::notice::Dispatched sync request to ${TARGET} for ${REPO_FULL}@${COMMIT_SHA:0:7}"
+          echo "::notice::Nudged ${TARGET} to sync ${REPO_FULL}@${COMMIT_SHA:0:7}"
