@@ -46,9 +46,7 @@
 ├── AGENTS.md                             Repo-local agent guidance
 ├── CLAUDE.md                             Points at AGENTS.md
 ├── catalog-info.yaml                     Backstage entity
-├── .coderabbit.yaml                      CANONICAL source for the org -
-│                                            referenced via remote_config: by
-│                                            every other Geolonia repo
+├── .coderabbit.yaml                      Inherits the org CodeRabbit defaults
 ├── .markdownlint.json
 ├── .editorconfig
 └── mkdocs.yml                            TechDocs build config

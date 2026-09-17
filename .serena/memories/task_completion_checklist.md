@@ -54,19 +54,7 @@ the tag it points at exists:
 gh api repos/geolonia/.github/git/refs/tags --jq '.[].ref'
 ```
 
-## 6. CodeRabbit central-config sanity (if you touched .coderabbit.yaml)
-
-This file is fetched by every other Geolonia repo. After merging, the
-next PR opened in any repo will see the new settings. Before merging,
-double-check:
-
-- YAML parses (CodeRabbit will tell you on the PR; verify locally with
-  `yamllint .coderabbit.yaml` if installed).
-- No setting is too repo-specific - central config should apply org-wide.
-- Plan a rollback: a quick revert PR is the right response if the new
-  config produces noisy or wrong reviews.
-
-## 7. Cross-impact of community-health edits
+## 6. Cross-impact of community-health edits
 
 If you touched a community-health file (`CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`,
 `SUPPORT.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, or
@@ -74,7 +62,7 @@ If you touched a community-health file (`CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`,
 every Geolonia repo that doesn't override locally. Higher-stakes than
 a typical doc edit.
 
-## 8. Open the PR
+## 7. Open the PR
 
 - Title under 70 chars, conventional-commit prefix.
 - Body follows the org PR template - Summary, link to issue
@@ -90,4 +78,3 @@ a typical doc edit.
 - Em-dashes anywhere in your changes.
 - Bumping a tag (`v1`, `v2`) on a reusable workflow without a release
   note explaining what changed.
-- Editing `.coderabbit.yaml` without a clear rollback plan.
