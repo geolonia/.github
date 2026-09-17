@@ -15,7 +15,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@abeebbc1aec186e93a4c4cbb25cde8aed60ea561 # v1.38.0
+    uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@d358a3671a70cfeea147c0c050c6479c8d2683ad # v1.39.1
     # Pass only the secrets the reusable declares, not `secrets: inherit`
     # (zizmor secrets-inherit). Both are optional (empty when unset).
     secrets:
