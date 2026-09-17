@@ -28,9 +28,9 @@ updates:
     # (ActionVersion "^v[0-9]+$") — so pinact then demands a SHA pin.
     #
     # Ignore exactly the reusables referenced at @v1. Listed individually, not
-    # as geolonia/.github/*, because this repo also SHA-pins two of its own
-    # reusables as a consumer would (publish-techdocs.yml, route-issue.yml);
-    # those must keep getting SHA bumps.
+    # as geolonia/.github/*, because this repo also SHA-pins one of its own
+    # reusables as a consumer would (publish-techdocs.yml); that one must keep
+    # getting SHA bumps.
     ignore:
       - dependency-name: "geolonia/.github/.github/workflows/reusable-security-suite.yml"
       - dependency-name: "geolonia/.github/.github/workflows/reusable-bumblebee-scan.yml"

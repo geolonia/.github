@@ -14,7 +14,20 @@ under `.github/workflows/`.
 | Bumblebee Supply-Chain Scan (`bumblebee-scan.yml`) | [Bumblebee Supply-Chain Scan](workflows/bumblebee-scan.md) |
 | Action Pinning Check (`pinact-check.yml`) | [Action Pinning Check](workflows/pinact-check.md) |
 | CDK Deploy Monitor (`cdk-deploy-monitor.yml`) | [CDK Deploy Monitor](workflows/cdk-deploy-monitor.md) |
-| Route issue to team board (`route-issue.yml`) | [Route issue to team board](workflows/route-issue.md) |
+
+## Automations that need no workflow file
+
+Two automations used to be templates here and are now delivered to every
+repository of the organization by a GitHub App webhook. A repository opts in
+through a **repository custom property**, which only organization owners and
+the operations team can set, so no file is added to the repository and nothing
+has to be kept up to date there. See
+[Org-wide automations](workflows/org-wide-automations.md).
+
+| Automation | Custom property |
+| --- | --- |
+| Route issue to team board | `issue-routing` = `true` |
+| Sync Team Access | `team-access-sync` = `true` |
 
 ## Why two workflow locations?
 

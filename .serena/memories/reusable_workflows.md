@@ -29,7 +29,7 @@ locations** in this repo plus a **tag-pinning convention** in callers.
   deploy is hung, optionally cancels on CANCEL verdict. Requires the
   `CdkDeployMonitor` IAM permission bundle and `contents: write` in the
   calling workflow + every parent in the call chain.
-- **`sync-team-access`** - keeps GitHub team-to-repo access in sync.
+- **`sync-team-access`** / **`route-issue`** - retained for existing callers only; both are now delivered org-wide by a GitHub App webhook gated on the custom properties `team-access-sync` / `issue-routing` (see docs/workflows/org-wide-automations.md). No new callers.
 - **`security-suite`** - consolidated per-PR security gate (bumblebee,
   betterleaks, pinact, zizmor) posting ONE PR comment. Enforced org-wide as a
   ruleset "required workflow" at `security-suite.yml@v1`, so targeted repos
