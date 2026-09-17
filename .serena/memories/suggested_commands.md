@@ -67,16 +67,6 @@ pip install mkdocs-techdocs-core
 mkdocs serve   # local preview at http://127.0.0.1:8000
 ```
 
-## Inspect CodeRabbit central config rollout
-
-```sh
-# Confirm the canonical file is reachable
-curl -fsSL https://raw.githubusercontent.com/geolonia/.github/main/.coderabbit.yaml | head
-
-# List which org repos still have a local .coderabbit.yaml
-gh search code 'org:geolonia path:.coderabbit.yaml -filename:.coderabbit.yaml'  # rough audit
-```
-
 ## GitHub utilities
 
 ```sh

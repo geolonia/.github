@@ -25,6 +25,5 @@ Geolonia repositories.
 
 - [Community health](community-health.md)
 - [Reusable workflows](workflows.md)
-- [Shared CodeRabbit configuration](coderabbit.md)
 - [Pinning GitHub Actions](github-actions-pinning.md)
 - [Organization profile](profile.md)

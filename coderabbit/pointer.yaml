@@ -1,4 +1,0 @@
-remote_config:
-  repository: geolonia/.github
-  ref: main
-  path: .coderabbit.yaml

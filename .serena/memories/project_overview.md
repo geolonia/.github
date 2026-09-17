@@ -18,9 +18,6 @@ Single source of truth for organization-wide GitHub assets and policies:
   template wrappers (in `workflow-templates/`)
 - Org-wide agent policy (`docs/agent-policy.md`) - referenced by every
   Geolonia repo's `AGENTS.md`
-- Canonical CodeRabbit configuration (`.coderabbit.yaml`) - referenced by
-  every other Geolonia repo via `remote_config:`. See the dedicated
-  `shared_coderabbit_config` memory.
 
 ## Critical constraints
 

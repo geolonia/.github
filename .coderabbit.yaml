@@ -1,60 +1,10 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# Inherits the org defaults from the central CodeRabbit configuration. Without
+# `inheritance: true` this file would replace them entirely, including the
+# setting that lets CodeRabbit approve pull requests.
+
+inheritance: true
+
+# Reviews in English. The org default is Japanese.
 language: en-US
-reviews:
-  profile: assertive
-  # Approve automatically once every CodeRabbit comment is resolved and the
-  # latest commit has been reviewed. Human approval is no longer required by
-  # default, so CodeRabbit has to be able to satisfy the required review.
-  request_changes_workflow: true
-  high_level_summary: true
-  poem: false
-  review_status: true
-  collapse_walkthrough: false
-  # Noise reduction: keep the review itself, drop the decorative extras.
-  sequence_diagrams: false
-  estimate_code_review_effort: false
-  related_issues: false
-  related_prs: false
-  suggested_reviewers: false
-  auto_review:
-    enabled: true
-    auto_incremental_review: true
-    # Review pull requests whatever their base, not only the default branch.
-    # The default ([]) skips any pull request stacked on another feature
-    # branch, and reports it as a passing "Review skipped: reviews are disabled
-    # for this base branch" check, which is indistinguishable from a clean
-    # review. Such a pull request is retargeted to the default branch when its
-    # base merges, and a retarget fires no review, so it would otherwise land
-    # having never been reviewed. Regex, so ".*" is every branch.
-    base_branches: [".*"]
-  # Do not open follow up work on its own.
-  finishing_touches:
-    docstrings:
-      enabled: false
-    unit_tests:
-      enabled: false
-  path_filters:
-    - "!**/pnpm-lock.yaml"
-    - "!**/yarn.lock"
-    - "!**/package-lock.json"
-    - "!**/dist/**"
-    - "!**/cdk.out/**"
-    - "!**/coverage/**"
-    - "!**/*.min.js"
-    - "!**/*.min.css"
-  tools:
-    shellcheck:
-      enabled: true
-    yamllint:
-      enabled: true
-    actionlint:
-      enabled: true
-    languagetool:
-      enabled: true
-      enabled_only: false
-      level: default
-    markdownlint:
-      enabled: true
-    hadolint:
-      enabled: true
-chat:
-  auto_reply: true
