@@ -20,8 +20,6 @@
 │   ├── cdk-deploy-monitor.properties.json
 │   ├── release-auto-on-tag.yml
 │   ├── release-auto-on-tag.properties.json
-│   ├── sync-team-access.yml
-│   ├── sync-team-access.properties.json
 │   └── CODEOWNERS
 ├── .github/
 │   ├── workflows/
@@ -30,7 +28,7 @@
 │   │   ├── reusable-backstage-techdocs.yml      Logic - called by other repos
 │   │   ├── reusable-cdk-deploy-monitor.yml      Logic - called by other repos
 │   │   ├── reusable-release-auto-on-tag.yml     Logic - called by other repos
-│   │   └── reusable-sync-team-access.yml        Logic - called by other repos
+│   │   └── reusable-sync-team-access.yml        Retained for existing callers only (org webhook replaced the template)
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.yml
 │   │   ├── feature_request.yml

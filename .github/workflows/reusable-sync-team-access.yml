@@ -1,5 +1,11 @@
 name: "[REUSABLE] Sync Team Access - Nudge"
 
+# RETAINED FOR EXISTING CALLERS ONLY. The nudge is delivered org-wide by a
+# GitHub App webhook: a repository takes part as soon as its custom property
+# `team-access-sync` is true, with no workflow file. New repositories must not
+# add a caller; the remaining callers are being removed, and this reusable
+# goes with the last of them. See docs/workflows/org-wide-automations.md.
+#
 # Tells the central team-access sync in geolonia-operations that this
 # repository's catalog-info.yaml changed. The payload carries only the
 # repository name: the central workflow fetches catalog-info.yaml from the

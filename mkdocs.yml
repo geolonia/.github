@@ -10,7 +10,7 @@ nav:
       - Bumblebee Supply-Chain Scan: workflows/bumblebee-scan.md
       - Action Pinning Check: workflows/pinact-check.md
       - CDK Deploy Monitor: workflows/cdk-deploy-monitor.md
-      - Route issue to team board: workflows/route-issue.md
+      - Org-wide automations: workflows/org-wide-automations.md
   - GitHub Actions Pinning: github-actions-pinning.md
   - Organization Profile: profile.md
 docs_dir: docs

@@ -1,7 +1,0 @@
-{
-  "name": "Route issue to team board",
-  "description": "When you set an issue's org Department field, the issue is added to that team's project board.",
-  "iconName": "book",
-  "categories": ["Automation"],
-  "filePatterns": [".github/workflows/.*"]
-}

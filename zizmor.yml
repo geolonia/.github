@@ -9,7 +9,7 @@
 # filename (optionally `name.yml:line` or `name.yml:line:col`); globs like
 # `*.yml` are NOT supported. So an entry suppresses a rule only in files
 # with that basename. That is ideal for the org-standard workflows that are
-# copied into many repos (route-issue.yml, publish-techdocs.yml, ...), but
+# copied into many repos (publish-techdocs.yml, security-suite.yml, ...), but
 # it cannot disable a rule everywhere. Prefer fixing over ignoring; keep
 # every entry below justified.
 #
@@ -18,7 +18,7 @@
 # rules:
 #   template-injection:
 #     ignore:
-#       - route-issue.yml   # title/body only reaches a trusted internal step
+#       - publish-techdocs.yml   # one-line justification for the exception
 rules:
   # unpinned-uses policies are matched by repo pattern (owner/repo, owner/*,
   # *), NOT by filename, so this applies org-wide (unlike the `ignore` list

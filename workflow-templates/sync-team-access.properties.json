@@ -1,6 +1,0 @@
-{
-  "name": "Sync Team Access",
-  "description": "Nudges the central team-access sync when catalog-info.yaml changes on the default branch, so the declared owner and access grants are applied within minutes instead of at the nightly run.",
-  "iconName": "lock",
-  "categories": ["Automation", "Access Control"]
-}
