@@ -27,8 +27,7 @@
 │   │   ├── release-auto-on-tag.yml       This repo's own release entry
 │   │   ├── reusable-backstage-techdocs.yml      Logic - called by other repos
 │   │   ├── reusable-cdk-deploy-monitor.yml      Logic - called by other repos
-│   │   ├── reusable-release-auto-on-tag.yml     Logic - called by other repos
-│   │   └── reusable-sync-team-access.yml        Retained for existing callers only (org webhook replaced the template)
+│   │   └── reusable-release-auto-on-tag.yml     Logic - called by other repos
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.yml
 │   │   ├── feature_request.yml

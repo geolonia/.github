@@ -29,7 +29,7 @@ locations** in this repo plus a **tag-pinning convention** in callers.
   deploy is hung, optionally cancels on CANCEL verdict. Requires the
   `CdkDeployMonitor` IAM permission bundle and `contents: write` in the
   calling workflow + every parent in the call chain.
-- **`sync-team-access`** / **`route-issue`** - retained for existing callers only; both are now delivered org-wide by a GitHub App webhook gated on the custom properties `team-access-sync` / `issue-routing` (see docs/workflows/org-wide-automations.md). No new callers.
+- Issue routing and the team-access sync nudge are NOT reusables any more: both are delivered org-wide by a GitHub App webhook gated on the custom properties `issue-routing` / `team-access-sync` (see docs/workflows/org-wide-automations.md). The former `reusable-route-issue.yml` / `reusable-sync-team-access.yml` were deleted once the last caller was removed.
 - **`security-suite`** - consolidated per-PR security gate (bumblebee,
   betterleaks, pinact, zizmor) posting ONE PR comment. Enforced org-wide as a
   ruleset "required workflow" at `security-suite.yml@v1`, so targeted repos
@@ -50,7 +50,7 @@ jobs:
 
 When a reusable declares secrets, pass exactly the ones its `workflow_call`
 contract declares — never `secrets: inherit` (zizmor secrets-inherit). For
-example, `reusable-route-issue.yml` declares the two dispatch secrets:
+example, a reusable that declares two secrets is called like this:
 
 ```yaml
     secrets:
