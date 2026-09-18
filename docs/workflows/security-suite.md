@@ -125,6 +125,51 @@ only when there is an error-severity finding (or a hard-gate failure). To
 accept a specific zizmor finding, add a justified ignore to `zizmor.yml` rather
 than turning the gate off.
 
+## Enrolling a repository: harden first, then enroll, then re-trigger
+
+Enrollment is a single property flip, and on a live repository it has two
+effects that are easy to miss. Doing it in this order avoids both.
+
+**1. Harden the repository first, while it is still un-enrolled.** zizmor's
+`unpinned-uses` is error severity, so a repository whose actions were never
+SHA-pinned gets roughly one blocking finding per `uses:` reference. Enroll such a
+repository and the very first run fails, which blocks every open pull request at
+once. Run `pinact` against the canonical org `.pinact.yml` and fix the remaining
+error-severity findings in code, then open the hardening pull request and read
+its run before flipping the property.
+
+**2. Re-trigger the repository's open pull requests as part of enrolling.** A
+ruleset required workflow only runs on a **new** `pull_request` event. Pull
+requests whose head commit predates the enrollment therefore have no run on that
+commit, and GitHub leaves the required check at "Expected" indefinitely: the
+pull request reports as blocked while every visible check is green, with nothing
+red to click and no entry in the Actions tab. It looks to the author like the
+gate never started, and it never will on its own.
+
+So after setting the property, walk the repository's open pull requests and give
+each one a fresh event. See the next section for how, which differs by author.
+
+## Re-triggering a pull request
+
+The method depends on who opened the pull request:
+
+| Author | Method | Why not the other one |
+|:--|:--|:--|
+| A person | **Close and reopen** it | Preserves the head SHA and any approval. An empty commit is a push, and the org main-protection ruleset sets `dismiss_stale_reviews_on_push`, so it silently drops the approval. |
+| Dependabot | Comment **`@dependabot recreate`** | Closing a Dependabot pull request is how you tell Dependabot never to recreate that update. Close and reopen would lose the update. |
+
+A pull request with merge conflicts gets no run either way; it picks one up when
+it is rebased. A draft may not receive an injected run until it is marked ready.
+
+Confirm the run landed:
+
+```bash
+gh api "repos/geolonia/<repo>/actions/runs?head_sha=<head>" \
+  --jq '[.workflow_runs[] | select(.name=="Security Suite")] | length'
+# 0 means the required check does not exist on that commit, and the pull
+# request cannot merge no matter how green everything else is.
+```
+
 ## ⚠️ The one rule you must not forget: keep `v1` a LIGHTWEIGHT tag
 
 **The `v1` tag must be a lightweight tag (a direct ref to a commit), never an
@@ -178,8 +223,12 @@ release**, no chain-bump:
 `@v1` moving is **not** proof the gate works - the injector failure is silent.
 After releasing, confirm the suite actually runs on a real consumer PR:
 
+Re-trigger an open consumer pull request (see
+[Re-triggering a pull request](#re-triggering-a-pull-request) for the method,
+which is not an empty commit when the pull request is approved), then read the
+runs on its head commit:
+
 ```bash
-# Re-trigger an open consumer PR with an empty commit (synchronize event):
 gh api "repos/geolonia/<repo>/actions/runs?head_sha=<head>" \
   --jq '.workflow_runs[].name'
 # Expect a "Security Suite" run, not just the repo's own CI.
