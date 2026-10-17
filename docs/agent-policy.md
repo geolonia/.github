@@ -33,6 +33,54 @@ gh pr create --title "<title>" --body "Fixes #<n>" --label "<label>"
 - Apply labels on issues and PRs (use existing defaults like `bug`,
   `enhancement`, `documentation`).
 
+## Language
+
+Agent-facing files (`AGENTS.md`, `CLAUDE.md`, `SKILL.md`, agent prompts and
+configuration) are written in English in every repository. Chat replies follow
+the user.
+
+Human-facing text is everything people read and act on: issues, PR titles and
+descriptions, commit messages, review replies, summaries, README, docs,
+changelogs, and code comments for teammates. For this text the audience decides.
+Work through these steps in order; the first one that gives an answer wins.
+
+1. **Explicit request or existing thread.** Use a language the requester asks
+   for. A reply in an existing issue or review thread uses the thread's
+   language.
+2. **Published documentation site.** The site's audience decides, not the
+   visibility of the repository that holds it.
+3. **Public repository.** English for everything a contributor meets. Where the
+   users are Japanese, add a short Japanese summary at the top of issues, PR
+   descriptions and the README.
+4. **Internal repository.** The language of the people doing the work:
+   - When the person you act for works in English, their work stays English,
+     also when the discussion behind it is Japanese. Add a Japanese summary at
+     the top where Japanese readers are expected.
+   - Otherwise the discussion or thread the text comes from decides, then the
+     repository's established language.
+   - Commit messages, code comments and changelogs follow the convention the
+     repository already has for them.
+5. **Nothing settles it.** Ask once. An automated run that cannot ask uses
+   Japanese and says so in its report.
+
+| Repository | Primary language | Add at the top |
+| --- | --- | --- |
+| Public | English | Japanese summary where users are Japanese |
+| Internal, English speakers | English | Japanese summary where expected |
+| Internal, Japanese-speaking team | Japanese | Optionally an English summary |
+
+- **Issues open with a short summary**, before the rest of the body. Where the
+  steps add a summary in the other language, that is this summary.
+- **Documents both agents and people act on** (threat models, runbooks,
+  conventions docs) have one canonical language from the steps above, plus a
+  summary in the other language. Do not keep two full translations.
+- **Existing text keeps its language.** These rules decide the language of new
+  text. When editing, match the document's language; offer a conversion, never
+  convert silently.
+
+The [`english-agent-files` skill](https://github.com/geolonia/skills/blob/main/skills/english-agent-files/SKILL.md)
+in `geolonia/skills` is the detailed version of this rule.
+
 ## Safety and hygiene
 
 - Never commit secrets or private keys.
