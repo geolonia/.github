@@ -111,6 +111,11 @@ jobs:
           CONFIG_REPO: geolonia/.github
           CONFIG_REF: main
         run: |
+          # A dangling symlink planted as zizmor.yml is removed first, so the
+          # fetched file is never written through it outside the checkout.
+          if [ -L zizmor.yml ] && [ ! -e zizmor.yml ]; then
+            rm -f zizmor.yml
+          fi
           if [ -f zizmor.yml ] || [ -f zizmor.yaml ] || [ -f .github/zizmor.yml ] || [ -f .github/zizmor.yaml ]; then
             echo "Using this repo's own zizmor config."
           elif gh api "repos/${CONFIG_REPO}/contents/zizmor.yml?ref=${CONFIG_REF}" \
@@ -157,16 +162,19 @@ jobs:
           SARIF="${RUNNER_TEMP}/zizmor.sarif"
           rm -rf "${SARIF}"
           pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > "${SARIF}" || true
-          if ! jq -e '.runs | type == "array"' "${SARIF}" >/dev/null 2>&1; then
+          if ! jq -e '(.runs | type == "array") and (.runs | length) >= 1' "${SARIF}" >/dev/null 2>&1; then
             echo "::error::The zizmor SARIF count pass produced no valid report."
             exit 1
           fi
-          count() { jq --arg L "$1" '[.runs[].results[]? | select(.level == $L)] | length' "${SARIF}"; }
+          count() { jq -e --arg L "$1" '[.runs[].results[]? | select(.level == $L)] | length' "${SARIF}"; }
+          # Each count is checked: a failed count must not be written as blank
+          # (read as 0 later) next to valid=true.
+          ERRORS=$(count error) && WARNINGS=$(count warning) && NOTICES=$(count note) || exit 1
           {
             echo "valid=true"
-            echo "errors=$(count error)"
-            echo "warnings=$(count warning)"
-            echo "notices=$(count note)"
+            echo "errors=${ERRORS}"
+            echo "warnings=${WARNINGS}"
+            echo "notices=${NOTICES}"
           } >> "$GITHUB_OUTPUT"
 
   report:
@@ -274,7 +282,7 @@ jobs:
             CALLOUT="> [!NOTE]"$'\n'"> All security checks passed."
           fi
 
-          BODY_FILE="suite-comment.md"
+          BODY_FILE="${RUNNER_TEMP}/suite-comment.md"
           {
             echo "${MARKER}"
             echo ""
