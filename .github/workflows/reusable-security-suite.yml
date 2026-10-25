@@ -86,7 +86,10 @@ jobs:
     outputs:
       # ok when zizmor exits clean, warn otherwise. The report job promotes
       # this to a blocking failure only when the SARIF error count > 0.
-      status: ${{ steps.zizmor.outcome == 'success' && 'ok' || 'warn' }}
+      # "error" when the count pass did not produce a valid SARIF report:
+      # its counts would read 0 and error-severity findings would pass as
+      # warnings (GHSA-qrh8-34qq-vr2c).
+      status: ${{ steps.counts.outputs.valid != 'true' && 'error' || (steps.zizmor.outcome == 'success' && 'ok' || 'warn') }}
       # finding counts by severity level (error / warning / notice) from the
       # SARIF count pass, so the summary shows the full breakdown. Computed
       # in-job (no Checks API), same zizmor version + config as the run above.
@@ -146,9 +149,21 @@ jobs:
         # pipx is preinstalled on GitHub-hosted runners.
         continue-on-error: true
         run: |
-          pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > zizmor.sarif 2>/dev/null || true
-          count() { local n; n=$(jq --arg L "$1" '[.runs[]?.results[]? | select(.level == $L)] | length' zizmor.sarif 2>/dev/null); echo "${n:-0}"; }
+          # The report goes outside the checkout, so a pull request cannot
+          # break it with a file or directory named zizmor.sarif. zizmor exits
+          # non-zero when it has findings, so its exit code says nothing here;
+          # a report without a `runs` array means the pass failed. Then
+          # `valid` stays unset and the job status becomes "error".
+          SARIF="${RUNNER_TEMP}/zizmor.sarif"
+          rm -rf "${SARIF}"
+          pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > "${SARIF}" || true
+          if ! jq -e '.runs | type == "array"' "${SARIF}" >/dev/null 2>&1; then
+            echo "::error::The zizmor SARIF count pass produced no valid report."
+            exit 1
+          fi
+          count() { jq --arg L "$1" '[.runs[].results[]? | select(.level == $L)] | length' "${SARIF}"; }
           {
+            echo "valid=true"
             echo "errors=$(count error)"
             echo "warnings=$(count warning)"
             echo "notices=$(count note)"
