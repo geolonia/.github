@@ -155,13 +155,13 @@ jobs:
         continue-on-error: true
         run: |
           # The report goes outside the checkout, so a pull request cannot
-          # break it with a file or directory named zizmor.sarif. zizmor exits
-          # non-zero when it has findings, so its exit code says nothing here;
-          # a report without a `runs` array means the pass failed. Then
-          # `valid` stays unset and the job status becomes "error".
+          # break it with a file or directory named zizmor.sarif. In SARIF mode
+          # zizmor exits 0 with findings too, so a non-zero exit, or a report
+          # without a run, means the pass failed. Then `valid` stays unset and
+          # the job status becomes "error".
           SARIF="${RUNNER_TEMP}/zizmor.sarif"
           rm -rf "${SARIF}"
-          pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > "${SARIF}" || true
+          pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > "${SARIF}"
           if ! jq -e '(.runs | type == "array") and (.runs | length) >= 1' "${SARIF}" >/dev/null 2>&1; then
             echo "::error::The zizmor SARIF count pass produced no valid report."
             exit 1
