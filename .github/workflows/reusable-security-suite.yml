@@ -84,12 +84,12 @@ jobs:
     permissions:
       contents: read
     outputs:
-      # ok when zizmor exits clean, warn otherwise. The report job promotes
-      # this to a blocking failure only when the SARIF error count > 0.
-      # "error" when the count pass did not produce a valid SARIF report:
-      # its counts would read 0 and error-severity findings would pass as
-      # warnings (GHSA-qrh8-34qq-vr2c).
-      status: ${{ steps.counts.outputs.valid != 'true' && 'error' || (steps.zizmor.outcome == 'success' && 'ok' || 'warn') }}
+      # From the SARIF count pass only (GHSA-qrh8-34qq-vr2c): "error" when it
+      # did not produce a valid report, "ok" with no findings, "warn"
+      # otherwise. The report job promotes warn to a blocking failure when
+      # the error count > 0. The action run above only adds the annotations,
+      # so its own failure (a Docker pull error, say) cannot turn into "warn".
+      status: ${{ steps.counts.outputs.valid != 'true' && 'error' || (steps.counts.outputs.total == '0' && 'ok' || 'warn') }}
       # finding counts by severity level (error / warning / notice) from the
       # SARIF count pass, so the summary shows the full breakdown. Computed
       # in-job (no Checks API), same zizmor version + config as the run above.
@@ -151,8 +151,12 @@ jobs:
         # error / warning / notice breakdown. Same pinned version and the
         # same auto-discovered zizmor.yml as the run above, so the counts
         # match the inline annotations. Computed in-job (no Checks API).
-        # pipx is preinstalled on GitHub-hosted runners.
+        # pipx is preinstalled on GitHub-hosted runners. The token is the one
+        # zizmor-action passes too, so both passes run the online audits
+        # (known-vulnerable-actions and others) and find the same issues.
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # The report goes outside the checkout, so a pull request cannot
           # break it with a file or directory named zizmor.sarif. In SARIF mode
@@ -175,6 +179,7 @@ jobs:
             echo "errors=${ERRORS}"
             echo "warnings=${WARNINGS}"
             echo "notices=${NOTICES}"
+            echo "total=$((ERRORS + WARNINGS + NOTICES))"
           } >> "$GITHUB_OUTPUT"
 
   report:
