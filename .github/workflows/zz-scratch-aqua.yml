@@ -1,0 +1,18 @@
+# Scratch test for GHSA-mgxj-6f6g-63xf, never to be merged: runs the pin check
+# from this branch (local path) and the released @v1, with a planted aqua.yaml.
+name: Scratch aqua config test
+on: pull_request
+permissions: {}
+jobs:
+  branch:
+    uses: ./.github/workflows/reusable-pinact-check.yml
+    permissions:
+      contents: read
+    with:
+      fail-on-findings: false
+  released:
+    uses: geolonia/.github/.github/workflows/reusable-pinact-check.yml@v1
+    permissions:
+      contents: read
+    with:
+      fail-on-findings: false
