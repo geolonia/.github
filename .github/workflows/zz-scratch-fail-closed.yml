@@ -1,0 +1,40 @@
+# Scratch test for geolonia/.github#160, never to be merged: runs the changed
+# reusables from this branch (local path), not the released @v1.
+name: Scratch fail-closed test (#160)
+on: pull_request
+permissions: {}
+jobs:
+  secret-leak:
+    uses: ./.github/workflows/reusable-secret-leak-check.yml
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      report-mode: summary
+  bumblebee:
+    uses: ./.github/workflows/reusable-bumblebee-scan.yml
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    with:
+      report-mode: summary
+  suite:
+    uses: ./.github/workflows/reusable-security-suite.yml
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+  results:
+    needs: [secret-leak, bumblebee, suite]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          SECRET: ${{ needs.secret-leak.outputs.status }} total=${{ needs.secret-leak.outputs.total }} result=${{ needs.secret-leak.result }}
+          BUMBLE: ${{ needs.bumblebee.outputs.status }} total=${{ needs.bumblebee.outputs.total }} result=${{ needs.bumblebee.result }}
+          SUITE: result=${{ needs.suite.result }}
+        run: |
+          echo "secret-leak: ${SECRET}"
+          echo "bumblebee:   ${BUMBLE}"
+          echo "suite:       ${SUITE}"
