@@ -137,6 +137,9 @@ jobs:
           # Indirect the step output through env so it is not expanded into
           # the script (zizmor template-injection).
           TECHDOCS_ENTITY_YAML: ${{ steps.techdocs_entity_yaml.outputs.result }}
+          # ASCII ranges in the entity check below: in some UTF-8 locales
+          # [A-Za-z] also matches letters like é.
+          LC_ALL: C
         run: |
           # Precedence:
           # 1) workflow input
@@ -146,6 +149,15 @@ jobs:
 
           if [ -z "$ENTITY" ]; then
             echo "ERROR: Could not resolve TECHDOCS_ENTITY (no input, no var, catalog-info.yaml missing metadata.name?)"
+            exit 1
+          fi
+
+          # Only a single-line Backstage triplet goes into GITHUB_ENV: a line
+          # break would add further variables (BASH_ENV, ...) for the later
+          # steps, which hold the publisher's AWS role (GHSA-7prm-2m3h-6wr4).
+          triplet='^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$'
+          if ! [[ "$ENTITY" =~ $triplet ]]; then
+            echo "::error::TECHDOCS_ENTITY must be one <namespace>/<kind>/<name> triplet (letters, digits, '.', '_', '-' on one line)"
             exit 1
           fi
 
