@@ -149,6 +149,15 @@ jobs:
             exit 1
           fi
 
+          # Only a single-line Backstage triplet goes into GITHUB_ENV: a line
+          # break would add further variables (BASH_ENV, ...) for the later
+          # steps, which hold the publisher's AWS role (GHSA-7prm-2m3h-6wr4).
+          triplet='^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$'
+          if ! [[ "$ENTITY" =~ $triplet ]]; then
+            echo "::error::TECHDOCS_ENTITY must be one <namespace>/<kind>/<name> triplet (letters, digits, '.', '_', '-'); got: $(printf '%q' "$ENTITY")"
+            exit 1
+          fi
+
           echo "Using TECHDOCS_ENTITY=${ENTITY}"
           echo "TECHDOCS_ENTITY=${ENTITY}" >> "$GITHUB_ENV"
 
