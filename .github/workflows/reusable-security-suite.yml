@@ -84,9 +84,12 @@ jobs:
     permissions:
       contents: read
     outputs:
-      # ok when zizmor exits clean, warn otherwise. The report job promotes
-      # this to a blocking failure only when the SARIF error count > 0.
-      status: ${{ steps.zizmor.outcome == 'success' && 'ok' || 'warn' }}
+      # From the SARIF count pass only (GHSA-qrh8-34qq-vr2c): "error" when it
+      # did not produce a valid report, "ok" with no findings, "warn"
+      # otherwise. The report job promotes warn to a blocking failure when
+      # the error count > 0. The action run above only adds the annotations,
+      # so its own failure (a Docker pull error, say) cannot turn into "warn".
+      status: ${{ steps.counts.outputs.valid != 'true' && 'error' || (steps.counts.outputs.total == '0' && 'ok' || 'warn') }}
       # finding counts by severity level (error / warning / notice) from the
       # SARIF count pass, so the summary shows the full breakdown. Computed
       # in-job (no Checks API), same zizmor version + config as the run above.
@@ -108,6 +111,11 @@ jobs:
           CONFIG_REPO: geolonia/.github
           CONFIG_REF: main
         run: |
+          # A dangling symlink planted as zizmor.yml is removed first, so the
+          # fetched file is never written through it outside the checkout.
+          if [ -L zizmor.yml ] && [ ! -e zizmor.yml ]; then
+            rm -f zizmor.yml
+          fi
           if [ -f zizmor.yml ] || [ -f zizmor.yaml ] || [ -f .github/zizmor.yml ] || [ -f .github/zizmor.yaml ]; then
             echo "Using this repo's own zizmor config."
           elif gh api "repos/${CONFIG_REPO}/contents/zizmor.yml?ref=${CONFIG_REF}" \
@@ -143,15 +151,35 @@ jobs:
         # error / warning / notice breakdown. Same pinned version and the
         # same auto-discovered zizmor.yml as the run above, so the counts
         # match the inline annotations. Computed in-job (no Checks API).
-        # pipx is preinstalled on GitHub-hosted runners.
+        # pipx is preinstalled on GitHub-hosted runners. The token is the one
+        # zizmor-action passes too, so both passes run the online audits
+        # (known-vulnerable-actions and others) and find the same issues.
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > zizmor.sarif 2>/dev/null || true
-          count() { local n; n=$(jq --arg L "$1" '[.runs[]?.results[]? | select(.level == $L)] | length' zizmor.sarif 2>/dev/null); echo "${n:-0}"; }
+          # The report goes outside the checkout, so a pull request cannot
+          # break it with a file or directory named zizmor.sarif. In SARIF mode
+          # zizmor exits 0 with findings too, so a non-zero exit, or a report
+          # without a run, means the pass failed. Then `valid` stays unset and
+          # the job status becomes "error".
+          SARIF="${RUNNER_TEMP}/zizmor.sarif"
+          rm -rf "${SARIF}"
+          pipx run --spec "zizmor==1.26.1" zizmor --persona regular --format sarif . > "${SARIF}"
+          if ! jq -e '(.runs | type == "array") and (.runs | length) >= 1' "${SARIF}" >/dev/null 2>&1; then
+            echo "::error::The zizmor SARIF count pass produced no valid report."
+            exit 1
+          fi
+          count() { jq -e --arg L "$1" '[.runs[].results[]? | select(.level == $L)] | length' "${SARIF}"; }
+          # Each count is checked: a failed count must not be written as blank
+          # (read as 0 later) next to valid=true.
+          ERRORS=$(count error) && WARNINGS=$(count warning) && NOTICES=$(count note) || exit 1
           {
-            echo "errors=$(count error)"
-            echo "warnings=$(count warning)"
-            echo "notices=$(count note)"
+            echo "valid=true"
+            echo "errors=${ERRORS}"
+            echo "warnings=${WARNINGS}"
+            echo "notices=${NOTICES}"
+            echo "total=$((ERRORS + WARNINGS + NOTICES))"
           } >> "$GITHUB_OUTPUT"
 
   report:
@@ -259,7 +287,7 @@ jobs:
             CALLOUT="> [!NOTE]"$'\n'"> All security checks passed."
           fi
 
-          BODY_FILE="suite-comment.md"
+          BODY_FILE="${RUNNER_TEMP}/suite-comment.md"
           {
             echo "${MARKER}"
             echo ""

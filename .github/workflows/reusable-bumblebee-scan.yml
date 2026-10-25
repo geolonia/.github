@@ -79,7 +79,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUMBLEBEE_VERSION: ${{ inputs.bumblebee-version }}
         run: |
-          mkdir -p .bumblebee && cd .bumblebee
+          # Outside the checkout and fresh: files a pull request adds under
+          # .bumblebee/ can neither join the threat catalog nor stand in for
+          # the report (GHSA-qrh8-34qq-vr2c).
+          rm -rf "${RUNNER_TEMP}/bumblebee"
+          mkdir -p "${RUNNER_TEMP}/bumblebee" && cd "${RUNNER_TEMP}/bumblebee"
           ASSET="bumblebee_${BUMBLEBEE_VERSION#v}_linux_amd64.tar.gz"
           gh release download "${BUMBLEBEE_VERSION}" \
             -R perplexityai/bumblebee \
@@ -100,16 +104,16 @@ jobs:
             scan
             --profile "${PROFILE}"
             --root "${GITHUB_WORKSPACE}"
-            --exposure-catalog .bumblebee/threat_intel
+            --exposure-catalog "${RUNNER_TEMP}/bumblebee/threat_intel"
             --findings-only
             --output file
-            --output-file bumblebee-findings.ndjson
+            --output-file "${RUNNER_TEMP}/bumblebee/findings.ndjson"
             --max-duration 10m
           )
           if [ -n "${ECOSYSTEMS}" ]; then
             args+=(--ecosystem "${ECOSYSTEMS}")
           fi
-          ./.bumblebee/bumblebee "${args[@]}"
+          "${RUNNER_TEMP}/bumblebee/bumblebee" "${args[@]}"
 
       - name: Count findings
         id: findings
@@ -117,12 +121,24 @@ jobs:
         env:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
         run: |
-          if [ ! -f bumblebee-findings.ndjson ]; then
-            echo "::error::bumblebee did not produce an output file (outcome=${SCAN_OUTCOME})"
+          # bumblebee exits 0 with findings too, so a failed step means the
+          # scan did not complete: an error, whatever file exists.
+          if [ "${SCAN_OUTCOME}" != "success" ] || [ ! -f "${RUNNER_TEMP}/bumblebee/findings.ndjson" ]; then
+            echo "::error::bumblebee scan failed (outcome=${SCAN_OUTCOME}) or produced no output file"
             echo "scan_failed=true" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          TOTAL=$(grep -c '"record_type":"finding"' bumblebee-findings.ndjson || true)
+          # A complete scan ends with one scan_summary record. bumblebee stops at
+          # --max-duration and still exits 0 (timed_out: true), so a pull
+          # request that makes the walk slow could otherwise skip files and pass.
+          if ! jq -se '[.[] | select(.record_type == "scan_summary")]
+                       | length == 1 and .[0].status == "complete" and .[0].timed_out == false' \
+               "${RUNNER_TEMP}/bumblebee/findings.ndjson" >/dev/null 2>&1; then
+            echo "::error::bumblebee did not complete the scan (no scan_summary with status complete, or it timed out)"
+            echo "scan_failed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          TOTAL=$(grep -c '"record_type":"finding"' "${RUNNER_TEMP}/bumblebee/findings.ndjson" || true)
           echo "total=${TOTAL:-0}" >> "$GITHUB_OUTPUT"
 
       - name: Compute status
@@ -149,7 +165,7 @@ jobs:
         run: |
           # Sanitize interpolated fields (newlines, `::`) to prevent
           # workflow-command injection from a maliciously named package.
-          grep '"record_type":"finding"' bumblebee-findings.ndjson | jq -r '
+          grep '"record_type":"finding"' "${RUNNER_TEMP}/bumblebee/findings.ndjson" | jq -r '
             def safe: tostring | gsub("[\r\n]"; " ") | gsub("::"; "[colon-colon]");
             "::error file=" + ((.source_file // "(unknown)") | safe) +
             "::Bumblebee finding: " + ((.ecosystem // "?") | safe) +
@@ -170,7 +186,7 @@ jobs:
           BUMBLEBEE_VERSION: ${{ inputs.bumblebee-version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          BODY_FILE="pr-comment.md"
+          BODY_FILE="${RUNNER_TEMP}/pr-comment.md"
           MARKER="<!-- bumblebee-reusable-v1 -->"
           {
             echo "${MARKER}"
@@ -182,7 +198,7 @@ jobs:
             elif [ "${TOTAL:-0}" = "0" ]; then
               echo "OK No exposure-catalog matches in this checkout."
             else
-              DETAILS=$(grep '"record_type":"finding"' bumblebee-findings.ndjson | jq -r '
+              DETAILS=$(grep '"record_type":"finding"' "${RUNNER_TEMP}/bumblebee/findings.ndjson" | jq -r '
                 "- **" + (.severity // "unspecified") + "** `" +
                 (.ecosystem // "?") + ":" + (.package_name // "?") + "@" + (.version // "?") +
                 "` matches `" + (.catalog_id // "?") + "`" +
@@ -260,7 +276,7 @@ jobs:
           # Reuse the PR-comment body but swap its marker for the
           # issue-specific one, so the idempotent lookup below
           # actually finds issues we created earlier.
-          ISSUE_BODY_FILE="issue-body.md"
+          ISSUE_BODY_FILE="${RUNNER_TEMP}/issue-body.md"
           {
             echo "${MARKER}"
             tail -n +2 "${BODY_FILE}"
@@ -304,7 +320,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bumblebee-findings-${{ github.event.pull_request.number || github.run_id }}
-          path: bumblebee-findings.ndjson
+          path: ${{ runner.temp }}/bumblebee/findings.ndjson
           if-no-files-found: warn
           retention-days: 30
 
