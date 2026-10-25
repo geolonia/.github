@@ -97,6 +97,29 @@ jobs:
             echo "::warning::No pinact config in this repo and the centralized fallback is disabled; pinact will use built-in defaults."
           fi
 
+      - name: Remove aqua configs from the checkout
+        # pinact-action installs pinact with aqua, which prefers a project
+        # config (aqua.yaml, ...) in the working directory over the action's
+        # own. A pull request could add one and choose which "pinact" runs
+        # (GHSA-mgxj-6f6g-63xf). pinact only reads the workflow files, so the
+        # checkout's aqua configs are removed first. A symlinked aqua/ or
+        # .aqua/ directory is removed as a link, never followed.
+        run: |
+          for d in aqua .aqua; do
+            if [ -L "$d" ]; then rm -f -- "$d"; fi
+          done
+          removed=()
+          for f in aqua.yaml aqua.yml .aqua.yaml .aqua.yml \
+                   aqua/aqua.yaml aqua/aqua.yml .aqua/aqua.yaml .aqua/aqua.yml; do
+            if [ -e "$f" ] || [ -L "$f" ]; then
+              rm -rf -- "$f"
+              removed+=("$f")
+            fi
+          done
+          if [ "${#removed[@]}" -gt 0 ]; then
+            echo "::notice::Removed aqua config from the checkout before the pin check: ${removed[*]}"
+          fi
+
       - name: Verify action pins
         id: pinact
         # In warn-only mode (fail-on-findings: false) let the step continue
