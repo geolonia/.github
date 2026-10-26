@@ -8,6 +8,13 @@
 - Fails the PR when any GitHub Action or reusable workflow is not pinned
   to a full commit SHA, when a version comment does not match the pinned
   SHA, or when a pinned release is younger than the minimum release age.
+- Also fails when an action reference that GitHub would run is written where
+  pinact cannot read it. pinact finds references by matching lines, so a
+  reference in a flow mapping (`- {uses: owner/repo@sha}`), a block scalar or
+  a YAML anchor, or in an action file outside the paths pinact reads, would
+  otherwise pass without being checked. A second step reads the workflow and
+  action files with a YAML parser to catch these. Write each `uses:` on its
+  own line, as in the example below.
 
 The org standard is to pin every action to a 40-char commit SHA with a
 matching version comment, for example
