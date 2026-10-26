@@ -164,17 +164,19 @@ jobs:
           pattern_res=$(printf '%s\n' "$patterns" | sed -e 's|^\./||' -e 's/[.+^$(){}|]/\\&/g' \
             -e 's/\*/[^\/]*/g' -e 's/?/[^\/]/g' -e 's/^/^/' -e 's/$/$/')
           pinact_reads() { printf '%s\n' "$1" | grep -qEf <(printf '%s\n' "$pattern_res"); }
-          # Is <ref> written on a line pinact's usesPattern (pinact v4) matches?
-          on_pinact_line() {
+          # How many lines of <file> pinact's usesPattern (pinact v4) reads as <ref>.
+          # Counted, not just found: a ref that occurs twice in the YAML (say once on
+          # a plain line, once in a flow mapping) needs two such lines.
+          pinact_lines() {
             REF="$2" awk '
               { sub(/\r$/, "") }
               match($0, /^ *(- +)?["\047]?uses["\047]? *: +/) {
                 v = substr($0, RLENGTH + 1)
                 sub(/^["\047]/, "", v)
                 if (match(v, /[ "\047]/)) v = substr(v, 1, RSTART - 1)
-                if (v == ENVIRON["REF"] && index(v, "@") > 0) { found = 1; exit }
+                if (v == ENVIRON["REF"] && index(v, "@") > 0) n++
               }
-              END { exit !found }' "$1"
+              END { print n + 0 }' "$1"
           }
           # Workflow-command escaping, so file names and messages cannot alter the annotation.
           esc_data() { local s=${1//%/%25}; s=${s//$'\r'/%0D}; printf '%s' "${s//$'\n'/%0A}"; }
@@ -191,7 +193,7 @@ jobs:
               report "$file" "could not be parsed as YAML, so its action references could not be checked: ${refs//$'\n'/ }"
               continue
             fi
-            while IFS= read -r ref; do
+            while read -r count ref; do
               [ -n "$ref" ] || continue
               case "$ref" in
                 ./* | \$/*) continue ;;  # local action or workflow in this repository
@@ -203,10 +205,10 @@ jobs:
               esac
               if ! pinact_reads "$file"; then
                 report "$file" "uses: '$ref' is in a file pinact does not read, so its pin was not checked. Move the action to a path pinact reads, or add the path to the files list in .pinact.yml."
-              elif ! on_pinact_line "$file" "$ref"; then
-                report "$file" "uses: '$ref' is not written on a plain 'uses: owner/repo@ref' line, so pinact did not check it. Write it on its own line in that form."
+              elif [ "$(pinact_lines "$file" "$ref")" -lt "$count" ]; then
+                report "$file" "uses: '$ref' is not written on a plain 'uses: owner/repo@ref' line everywhere it is used, so pinact did not check every use. Write each one on its own line in that form."
               fi
-            done <<< "$refs"
+            done < <(printf '%s\n' "$refs" | sort | uniq -c)
           done < <(git -c core.quotepath=off ls-files -z)
           if [ "$problems" -gt 0 ]; then
             echo "${problems} action reference(s) were not checked by pinact."
