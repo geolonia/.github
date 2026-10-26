@@ -42,12 +42,21 @@ version: 3
 # github-actions ecosystem only scans .github/workflows, so it cannot reach these
 # template files; this check covers them here, catching any unpinned or
 # comment-mismatched ref at PR time. Setting `files` replaces pinact's default
-# list, so the default workflow and composite-action patterns are repeated first.
+# list, so pinact v4's default workflow and composite-action patterns are
+# repeated first (an action.yml at the root or up to three directories deep,
+# which includes .github/actions/<name>/action.yml). Callers without their own
+# config get this file, so leaving one out means pinact skips those files there.
 files:
   - pattern: .github/workflows/*.yml
   - pattern: .github/workflows/*.yaml
-  - pattern: .github/actions/*/action.yml
-  - pattern: .github/actions/*/action.yaml
+  - pattern: action.yml
+  - pattern: action.yaml
+  - pattern: "*/action.yml"
+  - pattern: "*/action.yaml"
+  - pattern: "*/*/action.yml"
+  - pattern: "*/*/action.yaml"
+  - pattern: "*/*/*/action.yml"
+  - pattern: "*/*/*/action.yaml"
   - pattern: workflow-templates/*.yml
   - pattern: workflow-templates/*.yaml
 min_age:

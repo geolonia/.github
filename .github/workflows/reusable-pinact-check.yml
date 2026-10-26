@@ -9,7 +9,10 @@ name: "[REUSABLE] Action Pinning Check"
 #      days).
 #
 # It runs pinact in validation-only mode (fix: false): it never edits a
-# file or pushes a commit.
+# file or pushes a commit. pinact finds references by matching lines, so a
+# second step reads every workflow and action file with a YAML parser and
+# fails when a reference GitHub would run is written where pinact cannot
+# read it (a flow mapping, a block scalar, an anchor, an unread path).
 #
 # Config (centralized): pinact reads .pinact.yml from the repo root. When the
 # caller repo does not ship its own, this workflow fetches the canonical org
@@ -111,6 +114,121 @@ jobs:
           # against the currently pinned versions.
           verify_min_age: "true"
 
+      - name: Check pinact read every action reference
+        id: coverage
+        # pinact matches physical lines only and skips any other layout (a
+        # flow mapping, a block scalar, an anchor) without an error, so a
+        # reference written that way was never verified. This step reads
+        # the same files with a YAML parser and fails when a reference
+        # GitHub would run is not in a file and on a line pinact reads.
+        # The pinning policy itself (.pinact.yml) stays with pinact.
+        # Runs even when pinact failed, so both kinds of problem show at once.
+        if: ${{ !cancelled() }}
+        continue-on-error: ${{ !inputs.fail-on-findings }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # pinact finds action references by matching physical lines, and skips any
+          # other layout without an error. Read every workflow and action file with a
+          # YAML parser instead (flow mappings, block scalars, anchors) and require
+          # each `uses:` GitHub would run to sit in a file pinact reads, on a line
+          # pinact reads. pinact then applies the pinning policy (.pinact.yml) to it.
+          yq_version=$(yq --version 2>/dev/null || true)
+          if [[ "$yq_version" != *mikefarah* ]]; then
+            echo "::error::mikefarah/yq v4 is needed on this runner for this check."
+            exit 1
+          fi
+          # Files pinact reads: the `files` patterns of its config, else its defaults.
+          config=""
+          for c in .pinact.yaml .github/pinact.yaml .pinact.yml .github/pinact.yml; do
+            if [ -f "$c" ]; then config=$c; break; fi
+          done
+          patterns=""
+          if [ -n "$config" ]; then
+            # pinact joins each pattern onto the config file's directory (Go path.Join,
+            # which also resolves . and ..), so .github/pinact.yml patterns are relative
+            # to .github/.
+            patterns=$(yq -r '.files[]?.pattern | select(. != null)' "$config" |
+              DIR=$(dirname "$config") awk '{
+                n = split(ENVIRON["DIR"] "/" $0, seg, "/"); k = 0
+                for (i = 1; i <= n; i++) {
+                  if (seg[i] == "" || seg[i] == ".") continue
+                  if (seg[i] == "..") { if (k > 0) k--; continue }
+                  out[++k] = seg[i]
+                }
+                line = ""; for (i = 1; i <= k; i++) line = line (i > 1 ? "/" : "") out[i]
+                print line
+              }')
+          fi
+          if [ -z "$patterns" ]; then
+            patterns='.github/workflows/*.yml
+          .github/workflows/*.yaml
+          action.yml
+          action.yaml
+          */action.yml
+          */action.yaml
+          */*/action.yml
+          */*/action.yaml
+          */*/*/action.yml
+          */*/*/action.yaml'
+          fi
+          # Glob to regex, path-segment aware like Go's filepath.Match.
+          # shellcheck disable=SC2016 # $ is a literal regex character here
+          pattern_res=$(printf '%s\n' "$patterns" | sed -e 's/[.+^$(){}|]/\\&/g' \
+            -e 's/\*/[^\/]*/g' -e 's/?/[^\/]/g' -e 's/^/^/' -e 's/$/$/')
+          pinact_reads() { printf '%s\n' "$1" | grep -qEf <(printf '%s\n' "$pattern_res"); }
+          # How many lines of <file> pinact's usesPattern (pinact v4) reads as <ref>.
+          # Counted, not just found: a ref that occurs twice in the YAML (say once on
+          # a plain line, once in a flow mapping) needs two such lines.
+          pinact_lines() {
+            REF="$2" awk '
+              { sub(/\r$/, "") }
+              match($0, /^ *(- +)?["\047]?uses["\047]? *: +/) {
+                v = substr($0, RLENGTH + 1)
+                sub(/^["\047]/, "", v)
+                if (match(v, /[ "\047]/)) v = substr(v, 1, RSTART - 1)
+                if (v == ENVIRON["REF"] && index(v, "@") > 0) n++
+              }
+              END { print n + 0 }' "$1"
+          }
+          # Workflow-command escaping, so file names and messages cannot alter the annotation.
+          esc_data() { local s=${1//%/%25}; s=${s//$'\r'/%0D}; printf '%s' "${s//$'\n'/%0A}"; }
+          esc_prop() { local s; s=$(esc_data "$1"); s=${s//:/%3A}; printf '%s' "${s//,/%2C}"; }
+          problems=0
+          report() {
+            echo "::error file=$(esc_prop "$1")::$(esc_data "$2")"
+            problems=$((problems + 1))
+          }
+          while IFS= read -r -d '' file; do
+            [[ "$file" =~ ^\.github/workflows/[^/]+\.ya?ml$ || "$file" =~ (^|/)action\.ya?ml$ ]] || continue
+            if ! refs=$(yq -r 'explode(.) | [.jobs[]?.uses, .jobs[]?.steps[]?.uses, .runs.steps[]?.uses]
+                               | .[] | select(. != null) | (select(tag == "!!str") // "<not a string>")' "$file" 2>&1); then
+              report "$file" "could not be parsed as YAML, so its action references could not be checked: ${refs//$'\n'/ }"
+              continue
+            fi
+            while read -r count ref; do
+              [ -n "$ref" ] || continue
+              case "$ref" in
+                ./* | \$/*) continue ;;  # local action or workflow in this repository
+                docker://*)
+                  # pinact does not check docker:// references, so pin them here.
+                  [[ "$ref" =~ ^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]] ||
+                    report "$file" "uses: '$ref' is not pinned to a sha256 digest."
+                  continue ;;
+              esac
+              if ! pinact_reads "$file"; then
+                report "$file" "uses: '$ref' is in a file pinact does not read, so its pin was not checked. Move the action to a path pinact reads, or add the path to the files list in .pinact.yml."
+              elif [ "$(pinact_lines "$file" "$ref")" -lt "$count" ]; then
+                report "$file" "uses: '$ref' is not written on a plain 'uses: owner/repo@ref' line everywhere it is used, so pinact did not check every use. Write each one on its own line in that form."
+              fi
+            done < <(printf '%s\n' "$refs" | sort | uniq -c)
+          done < <(git -c core.quotepath=off ls-files -z)
+          if [ "$problems" -gt 0 ]; then
+            echo "${problems} action reference(s) were not checked by pinact."
+            exit 1
+          fi
+          echo "pinact read every action reference GitHub would run."
+
       - name: Status and gate
         id: status
         # always() so the status output is still set when the pinact step
@@ -118,16 +236,17 @@ jobs:
         if: always()
         env:
           OUTCOME: ${{ steps.pinact.outcome }}
+          COVERAGE: ${{ steps.coverage.outcome }}
           FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         run: |
-          if [ "${OUTCOME}" = "success" ]; then
+          if [ "${OUTCOME}" = "success" ] && [ "${COVERAGE}" = "success" ]; then
             echo "status=ok" >> "$GITHUB_OUTPUT"
             echo "All referenced actions are pinned, comment-matched, and meet the minimum release age."
           elif [ "${FAIL_ON_FINDINGS}" = "true" ]; then
             echo "status=fail" >> "$GITHUB_OUTPUT"
-            echo "::error::pinact found an action that is unpinned, comment-mismatched, or below the .pinact.yml minimum release age. Fix per the job log (Dependabot keeps pins current), then re-run."
+            echo "::error::An action is unpinned, comment-mismatched, below the .pinact.yml minimum release age, or written where pinact cannot read it. Fix per the job log (Dependabot keeps pins current), then re-run."
             exit 1
           else
             echo "status=warn" >> "$GITHUB_OUTPUT"
-            echo "::warning::pinact found an action that is unpinned, comment-mismatched, or below the .pinact.yml minimum release age. Not blocking (warn-only), but please address it."
+            echo "::warning::An action is unpinned, comment-mismatched, below the .pinact.yml minimum release age, or written where pinact cannot read it. Not blocking (warn-only), but please address it."
           fi
