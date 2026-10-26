@@ -105,10 +105,13 @@ jobs:
         # checkout's aqua configs are removed first. A symlinked aqua/ or
         # .aqua/ directory is removed as a link, never followed.
         run: |
-          for d in aqua .aqua; do
-            if [ -L "$d" ]; then rm -f -- "$d"; fi
-          done
           removed=()
+          for d in aqua .aqua; do
+            if [ -L "$d" ]; then
+              rm -f -- "$d"
+              removed+=("$d (symlink)")
+            fi
+          done
           for f in aqua.yaml aqua.yml .aqua.yaml .aqua.yml \
                    aqua/aqua.yaml aqua/aqua.yml .aqua/aqua.yaml .aqua/aqua.yml; do
             if [ -e "$f" ] || [ -L "$f" ]; then
