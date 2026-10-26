@@ -101,8 +101,8 @@ jobs:
         # pinact-action installs pinact with aqua, which prefers a project
         # config (aqua.yaml, ...) in the working directory over the action's
         # own. A pull request could add one and choose which "pinact" runs
-        # (GHSA-mgxj-6f6g-63xf). pinact only reads the workflow files, so the
-        # checkout's aqua configs are removed first. A symlinked aqua/ or
+        # (GHSA-mgxj-6f6g-63xf). pinact reads only workflow and action.yml
+        # files, so the checkout's aqua configs are removed first. A symlinked aqua/ or
         # .aqua/ directory is removed as a link, never followed.
         shell: bash
         run: |
