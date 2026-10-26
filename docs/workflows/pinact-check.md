@@ -18,6 +18,11 @@
   `uses: docker://...` reference to be pinned to a `@sha256:` digest, since
   pinact does not check those. It needs mikefarah `yq` v4 on the runner
   (preinstalled on GitHub-hosted Ubuntu runners).
+- Removes any aqua config (`aqua.yaml`, `.aqua.yaml`, `aqua/aqua.yaml`, ...)
+  from the checkout before it runs. pinact-action installs pinact with aqua,
+  which would otherwise let a pull request choose which pinact version runs.
+  pinact reads only workflow and `action.yml` files, so nothing it reads is
+  removed.
 
 The org standard is to pin every action to a 40-char commit SHA with a
 matching version comment, for example
