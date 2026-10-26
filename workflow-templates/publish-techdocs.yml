@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@259f87ec5784d8cc4c8ab0b25511ffeacb95a60a # v1.41.0
+    uses: geolonia/.github/.github/workflows/reusable-backstage-techdocs.yml@d27f9b7de9e8bb4a219aef408f69d6f8896c1d2a # v1.43.1
     secrets:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       TECHDOCS_AWS_ACCOUNT_ID: ${{ secrets.TECHDOCS_AWS_ACCOUNT_ID }}
