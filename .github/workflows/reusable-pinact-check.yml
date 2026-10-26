@@ -104,6 +104,7 @@ jobs:
         # (GHSA-mgxj-6f6g-63xf). pinact only reads the workflow files, so the
         # checkout's aqua configs are removed first. A symlinked aqua/ or
         # .aqua/ directory is removed as a link, never followed.
+        shell: bash
         run: |
           removed=()
           for d in aqua .aqua; do
