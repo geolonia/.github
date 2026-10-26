@@ -30,8 +30,9 @@ repos:
         name: pinact (pin GitHub Actions)
         # Unset pinact's GitHub Enterprise Server tokens: a repository's
         # .pinact.yml can set the GHES API URL, so a branch you check out
-        # could send such a token to a host of its choice. Geolonia has no
-        # GHES, so pinact never needs one here.
+        # could send such a token to a host of its choice. Geolonia does not
+        # use GHES, so pinact never needs one here. These are the variables
+        # pinact v4.1.0 reads; check the list again when you upgrade pinact.
         entry: env -u PINACT_GHES_TOKEN -u GHES_TOKEN -u GITHUB_TOKEN_ENTERPRISE -u GITHUB_ENTERPRISE_TOKEN pinact run
         language: system
         # Only run when a workflow or action definition changes. Matches
