@@ -14,7 +14,10 @@
   a YAML anchor, or in an action file outside the paths pinact reads, would
   otherwise pass without being checked. A second step reads the workflow and
   action files with a YAML parser to catch these. Write each `uses:` on its
-  own line, as in the example below.
+  own line, as in the example below. The same step requires a
+  `uses: docker://...` reference to be pinned to a `@sha256:` digest, since
+  pinact does not check those. It needs mikefarah `yq` v4 on the runner
+  (preinstalled on GitHub-hosted Ubuntu runners).
 
 The org standard is to pin every action to a 40-char commit SHA with a
 matching version comment, for example
@@ -56,6 +59,9 @@ One file is required in the repo; the other is optional:
    sets the minimum release age (org default: 7 days, `min_age.value: 7`,
    `always: true`). This check fetches the same canonical file as its fallback
    when your repo has none, so commit a local copy only to pin an override.
+   If your copy sets `files`, it replaces pinact's default file list: keep
+   the default workflow and `action.yml` patterns in it, or the check fails
+   for actions in files pinact no longer reads.
    It is the GitHub Actions analog of pnpm's `minimumReleaseAge`: a new
    tag is not adopted until it has survived a week, the window when a
    hijacked-tag attack is most likely to still be live. The canonical

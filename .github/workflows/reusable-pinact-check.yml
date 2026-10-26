@@ -122,6 +122,8 @@ jobs:
         # the same files with a YAML parser and fails when a reference
         # GitHub would run is not in a file and on a line pinact reads.
         # The pinning policy itself (.pinact.yml) stays with pinact.
+        # Runs even when pinact failed, so both kinds of problem show at once.
+        if: ${{ !cancelled() }}
         continue-on-error: ${{ !inputs.fail-on-findings }}
         shell: bash
         run: |
@@ -131,7 +133,8 @@ jobs:
           # YAML parser instead (flow mappings, block scalars, anchors) and require
           # each `uses:` GitHub would run to sit in a file pinact reads, on a line
           # pinact reads. pinact then applies the pinning policy (.pinact.yml) to it.
-          if ! yq --version 2>/dev/null | grep -q mikefarah; then
+          yq_version=$(yq --version 2>/dev/null || true)
+          if [[ "$yq_version" != *mikefarah* ]]; then
             echo "::error::mikefarah/yq v4 is needed on this runner for this check."
             exit 1
           fi
@@ -142,33 +145,47 @@ jobs:
           done
           patterns=""
           if [ -n "$config" ]; then
-            patterns=$(yq -r '.files[]?.pattern' "$config")
+            patterns=$(yq -r '.files[]?.pattern | select(. != null)' "$config")
           fi
           if [ -z "$patterns" ]; then
-            patterns=$(printf '%s\n' .github/workflows/*.yml .github/workflows/*.yaml \
-              action.yml action.yaml '*/action.yml' '*/action.yaml' '*/*/action.yml' \
-              '*/*/action.yaml' '*/*/*/action.yml' '*/*/*/action.yaml')
+            patterns='.github/workflows/*.yml
+          .github/workflows/*.yaml
+          action.yml
+          action.yaml
+          */action.yml
+          */action.yaml
+          */*/action.yml
+          */*/action.yaml
+          */*/*/action.yml
+          */*/*/action.yaml'
           fi
           # Glob to regex, path-segment aware like Go's filepath.Match.
           # shellcheck disable=SC2016 # $ is a literal regex character here
-          pattern_res=$(printf '%s\n' "$patterns" | sed -e 's/[.+^$(){}|]/\\&/g' \
+          pattern_res=$(printf '%s\n' "$patterns" | sed -e 's|^\./||' -e 's/[.+^$(){}|]/\\&/g' \
             -e 's/\*/[^\/]*/g' -e 's/?/[^\/]/g' -e 's/^/^/' -e 's/$/$/')
           pinact_reads() { printf '%s\n' "$1" | grep -qEf <(printf '%s\n' "$pattern_res"); }
           # Is <ref> written on a line pinact's usesPattern (pinact v4) matches?
           on_pinact_line() {
-            awk -v ref="$2" '
+            REF="$2" awk '
               { sub(/\r$/, "") }
               match($0, /^ *(- +)?["\047]?uses["\047]? *: +/) {
                 v = substr($0, RLENGTH + 1)
                 sub(/^["\047]/, "", v)
                 if (match(v, /[ "\047]/)) v = substr(v, 1, RSTART - 1)
-                if (v == ref && index(v, "@") > 0) { found = 1; exit }
+                if (v == ENVIRON["REF"] && index(v, "@") > 0) { found = 1; exit }
               }
               END { exit !found }' "$1"
           }
+          # Workflow-command escaping, so file names and messages cannot alter the annotation.
+          esc_data() { local s=${1//%/%25}; s=${s//$'\r'/%0D}; printf '%s' "${s//$'\n'/%0A}"; }
+          esc_prop() { local s; s=$(esc_data "$1"); s=${s//:/%3A}; printf '%s' "${s//,/%2C}"; }
           problems=0
-          report() { echo "::error file=$1::$2"; problems=$((problems + 1)); }
-          while IFS= read -r file; do
+          report() {
+            echo "::error file=$(esc_prop "$1")::$(esc_data "$2")"
+            problems=$((problems + 1))
+          }
+          while IFS= read -r -d '' file; do
+            [[ "$file" =~ ^\.github/workflows/[^/]+\.ya?ml$ || "$file" =~ (^|/)action\.ya?ml$ ]] || continue
             if ! refs=$(yq -r 'explode(.) | [.jobs[]?.uses, .jobs[]?.steps[]?.uses, .runs.steps[]?.uses]
                                | .[] | select(. != null) | (select(tag == "!!str") // "<not a string>")' "$file" 2>&1); then
               report "$file" "could not be parsed as YAML, so its action references could not be checked: ${refs//$'\n'/ }"
@@ -179,6 +196,7 @@ jobs:
               case "$ref" in
                 ./* | \$/*) continue ;;  # local action or workflow in this repository
                 docker://*)
+                  # pinact does not check docker:// references, so pin them here.
                   [[ "$ref" =~ ^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]] ||
                     report "$file" "uses: '$ref' is not pinned to a sha256 digest."
                   continue ;;
@@ -189,7 +207,7 @@ jobs:
                 report "$file" "uses: '$ref' is not written on a plain 'uses: owner/repo@ref' line, so pinact did not check it. Write it on its own line in that form."
               fi
             done <<< "$refs"
-          done < <(git ls-files | grep -E '^\.github/workflows/[^/]+\.ya?ml$|(^|/)action\.ya?ml$' || true)
+          done < <(git -c core.quotepath=off ls-files -z)
           if [ "$problems" -gt 0 ]; then
             echo "${problems} action reference(s) were not checked by pinact."
             exit 1
