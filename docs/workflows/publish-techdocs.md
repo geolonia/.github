@@ -1,6 +1,12 @@
 # Publish TechDocs (`publish-techdocs.yml`)
 
 - Runs on `main` when `docs/**` or `mkdocs.yml` changes, or manually via `workflow_dispatch`.
+- A manual run on any branch other than the default branch is skipped: the
+  `branches:` filter does not apply to `workflow_dispatch`, so the job checks
+  the ref itself.
+- The reusable workflow refuses to publish a commit that is not on the default
+  branch (the tip or an ancestor of it), whatever the caller passes in `tag`.
+  Release tags must point at merged commits.
 - Delegates to `reusable-backstage-techdocs.yml@v1` with safe defaults for AWS
   region, environment, and tool versions.
 - Uses `TECHDOCS_AWS_ACCOUNT_ID` of `geolonia/.github` repository secret by default;
