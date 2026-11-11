@@ -1,13 +1,26 @@
 # Publish TechDocs (`publish-techdocs.yml`)
 
 - Runs on `main` when `docs/**` or `mkdocs.yml` changes, or manually via `workflow_dispatch`.
-- A manual run on any ref other than the default branch is skipped: the
+- A manual run on any ref other than the publish branch is skipped: the
   `branches:` filter does not apply to `workflow_dispatch`, so the job checks
   the ref itself.
-- The reusable workflow refuses to publish a commit that is not on the default
+- The reusable workflow refuses to publish a commit that is not on the publish
   branch (the tip or an ancestor of it), whatever the caller passes in `tag`.
   Release tags must point at merged commits (with squash merges, the
-  squash-merge commit on the default branch, not the PR branch commit).
+  squash-merge commit on the publish branch, not the PR branch commit).
+- The publish branch is the default branch. A repository whose default branch
+  is not the one it publishes docs from (for example `develop` as default and
+  docs published on pushes to `main`) sets the repository variable
+  `TECHDOCS_PUBLISH_BRANCH` to that branch (Settings, Secrets and variables,
+  Actions, Variables). Without it, every publish from `main` fails with
+  "not on the publish branch", because `main` is ahead of `develop`. It is a
+  variable and not an input, because only repository admins can change
+  variables. Set it on the repository, not on the organization (it would apply
+  to every repository) and not on an environment (the template's dispatch
+  guard does not see environment variables). The check is only as strong as
+  the protection of that branch: it must require pull requests, as the org
+  ruleset does for the default branch, `main` and `master`. Also make the
+  `push:` trigger of the caller list that branch.
 - Delegates to `reusable-backstage-techdocs.yml@v1` with safe defaults for AWS
   region, environment, and tool versions.
 - Uses `TECHDOCS_AWS_ACCOUNT_ID` of `geolonia/.github` repository secret by default;

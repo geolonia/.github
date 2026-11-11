@@ -5,7 +5,7 @@ on:
     inputs:
       # --- Common fields (all optional) ---
       tag:
-        description: "Tag/SHA to build docs from (defaults to current ref). Must be on the default branch."
+        description: "Tag/SHA to build docs from (defaults to current ref). Must be on the publish branch (vars.TECHDOCS_PUBLISH_BRANCH, else the default branch)."
         required: false
         type: string
       environment:
@@ -102,26 +102,48 @@ jobs:
           # (zizmor artipacked).
           persist-credentials: false
 
-      - name: Refuse a commit that is not on the default branch
+      - name: Refuse a commit that is not on the publish branch
         # The publish below overwrites the live docs, and the publisher role
         # trusts every ref of the org's repositories. A manual run
         # (workflow_dispatch) can start on any branch and `tag` can name any
         # commit, so stop here, before anything from the checkout runs and
         # before any AWS credentials exist, unless the checked-out commit is
-        # already on the default branch (the tip or an ancestor of it).
+        # already on the publish branch (the tip or an ancestor of it).
+        # The publish branch is the default branch, unless the repository
+        # variable TECHDOCS_PUBLISH_BRANCH names another one (for a repository
+        # whose default branch is `develop` but whose docs are published from
+        # `main`). It is a variable, not an input: only repository admins can
+        # set variables, while anyone who can push a workflow can set inputs.
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH_BRANCH_VAR: ${{ vars.TECHDOCS_PUBLISH_BRANCH }}
+          # ASCII ranges in the branch check below: in some UTF-8 locales
+          # [A-Za-z] also matches letters like é.
+          LC_ALL: C
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
-          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
-          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${default_branch}...${sha}?per_page=1" --jq .status)"
+          if [ -n "${PUBLISH_BRANCH_VAR}" ]; then
+            branch="${PUBLISH_BRANCH_VAR}"
+            if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              echo "::error::TECHDOCS_PUBLISH_BRANCH must be a branch name (letters, digits, '.', '_', '/', '-')."
+              exit 1
+            fi
+          else
+            branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
+          fi
+          # `heads/` makes the base a branch: a bare name could also match a
+          # tag of the same name, which anyone with write access can push.
+          if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/heads/${branch}...${sha}?per_page=1" --jq .status)"; then
+            echo "::error::Could not compare commit ${sha} with branch ${branch}. Does the branch exist? Check the repository variable TECHDOCS_PUBLISH_BRANCH."
+            exit 1
+          fi
           case "$status" in
             identical|behind)
-              echo "Commit ${sha} is on ${default_branch}; publishing."
+              echo "Commit ${sha} is on ${branch}; publishing."
               ;;
             *)
-              echo "::error::Commit ${sha} is not on the default branch ${default_branch} (compare status: ${status}). TechDocs are published only from merged commits; merge first, then run the workflow on ${default_branch}."
+              echo "::error::Commit ${sha} is not on the publish branch ${branch} (compare status: ${status}). TechDocs are published only from merged commits; merge first, then run the workflow on ${branch}. If docs are published from a branch other than the default branch, set the repository variable TECHDOCS_PUBLISH_BRANCH to it."
               exit 1
               ;;
           esac
