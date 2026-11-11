@@ -115,13 +115,15 @@ jobs:
               failed=1
             fi
           }
-          # npm: a semver version or range (1.9.0, ^1.9.0, ~1.9, 1.x) or a
+          # npm: a semver version or range (1.9.0, ^1.9.0, ~1.9, 1.x,
+          # '>=1.9.0 <2.0.0': comparators separated by single spaces) or a
           # dist-tag of @techdocs/cli (latest, next). No ':' or '/', so no
           # git, URL, file or alias specs.
-          npm_semver='^[~^]?[0-9]+(\.([0-9]+|x|\*)){0,2}(-[0-9A-Za-z.-]+)?$'
+          npm_cmp='(>=|<=|>|<|=|~|\^)?[0-9]+(\.([0-9]+|[xX*])){0,2}(-[0-9A-Za-z.-]+)?'
+          npm_semver="^${npm_cmp}( ${npm_cmp})*\$"
           npm_tag='^[A-Za-z][A-Za-z0-9._-]*$'
           if ! [[ "$TECHDOCS_CLI_VER" =~ $npm_semver || "$TECHDOCS_CLI_VER" =~ $npm_tag ]]; then
-            echo "::error::techdocs_cli_version (or vars.TECHDOCS_CLI_VERSION) is not an accepted value. Allowed: a semver version or range like 1.9.0, ^1.9.0, 1.x, or a dist-tag like latest."
+            echo "::error::techdocs_cli_version (or vars.TECHDOCS_CLI_VERSION) is not an accepted value. Allowed: a semver version or range like 1.9.0, ^1.9.0, 1.x or '>=1.9.0 <2.0.0', or a dist-tag like latest."
             failed=1
           fi
           # pip: one or more comma-separated version specifiers
@@ -138,8 +140,12 @@ jobs:
             '^((pypy|graalpy)-?)?[0-9]+(\.([0-9]+|x|\*)){0,2}t?(-[0-9A-Za-z.]+)?$' \
             "a Python version like 3.13, 3.13.1, 3.x or pypy3.10"
           # A relative path inside the checkout: no leading '/', and no
-          # segment starting with '.', which also rules out '..'.
-          check "build_directory (or vars.TECHDOCS_BUILD_DIR)" "$BUILD_DIR" \
+          # segment starting with '.', which also rules out '..'. A leading
+          # './' and a trailing '/' are dropped first (./site and site/ mean
+          # site); the publish step uses "./${BUILD_DIR}", where both still work.
+          build_dir="${BUILD_DIR#./}"
+          build_dir="${build_dir%/}"
+          check "build_directory (or vars.TECHDOCS_BUILD_DIR)" "$build_dir" \
             '^[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*$' \
             "a relative directory like site or build/site (letters, digits, '.', '_', '-', no '..')"
           exit "$failed"
@@ -269,6 +275,27 @@ jobs:
 
       - name: Generate TechDocs (no Docker)
         run: techdocs-cli generate --no-docker --verbose
+
+      - name: Refuse symlinks that lead outside the checkout
+        # The publisher uploads what it finds under the build directory. If
+        # that directory, or an entry in it, is a symlink to a path outside
+        # the checkout, files from elsewhere on the runner would be uploaded.
+        run: |
+          set -euo pipefail
+          root="$(realpath "${GITHUB_WORKSPACE}")"
+          inside() { case "$1" in "$root"|"$root"/*) return 0 ;; *) return 1 ;; esac; }
+          if ! dir="$(realpath -e "./${BUILD_DIR}")" || ! inside "$dir"; then
+            echo "::error::The build directory ${BUILD_DIR} does not exist or is outside the checkout."
+            exit 1
+          fi
+          bad=0
+          while IFS= read -r -d '' link; do
+            if ! target="$(realpath -e "$link")" || ! inside "$target"; then
+              echo "::error::${link} is a symlink that leads outside the checkout (or nowhere)."
+              bad=1
+            fi
+          done < <(find "./${BUILD_DIR}/" -type l -print0)
+          exit "$bad"
 
       - name: Publish to S3
         run: |
