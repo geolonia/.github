@@ -24,12 +24,13 @@ on:
 
 jobs:
   publish:
-    # Publish only from the default branch. `branches:` above does not apply
-    # to workflow_dispatch, which can be started on any branch; skip such a
-    # run instead of letting it overwrite the live docs with unmerged content.
-    # (The reusable workflow also refuses a commit that is not on the default
-    # branch; this keeps the run green and skipped.)
-    if: github.event_name != 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # Publish only from the publish branch: the repository variable
+    # TECHDOCS_PUBLISH_BRANCH if set, else the default branch. `branches:`
+    # above does not apply to workflow_dispatch, which can be started on any
+    # branch; skip such a run instead of letting it overwrite the live docs
+    # with unmerged content. (The reusable workflow also refuses a commit
+    # that is not on the publish branch; this keeps the run green and skipped.)
+    if: github.event_name != 'workflow_dispatch' || github.ref == format('refs/heads/{0}', vars.TECHDOCS_PUBLISH_BRANCH || github.event.repository.default_branch)
     # Explicit least-privilege ceiling for the reusable (OIDC publish +
     # checkout); avoids the repo-default token (zizmor excessive-permissions).
     permissions:
