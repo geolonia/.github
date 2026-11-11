@@ -37,9 +37,11 @@
   | `build_directory` (`TECHDOCS_BUILD_DIR`) | `site` | a relative directory inside the checkout (`site`, `./site`, `build/site/`), no `..` and no leading `/` |
 
   Git, URL, file and alias specs (`github:owner/repo`, `npm:other@1`,
-  `file:...`, ` @ https://...`), pip extras and markers are refused. Before
-  publishing, the workflow also stops if the build directory, or a symlink in
-  it, leads outside the checkout.
+  `file:...`, ` @ https://...`), pip extras and markers are refused. Docs are
+  generated into `build_directory`. The workflow also stops, before
+  generation and again before publishing, if any symlink in the checkout
+  (a docs page, the build directory, or a link inside a symlinked directory)
+  leads outside the checkout.
 
   These checks are in the reusable workflow, so a caller gets them only from a
   pin that includes them. Callers pinned to `@v1` get them with the release;

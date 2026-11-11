@@ -267,6 +267,28 @@ jobs:
           echo "Using TECHDOCS_ENTITY=${ENTITY}"
           echo "TECHDOCS_ENTITY=${ENTITY}" >> "$GITHUB_ENV"
 
+      - name: Refuse symlinks that lead outside the checkout (before generation)
+        # MkDocs copies a symlinked source file into the site as a regular
+        # file, and cleans the output directory before writing to it. A
+        # symlink in the checkout that leads outside it (a source page, the
+        # build directory itself, or a link inside a symlinked directory)
+        # would copy, delete or upload files from elsewhere on the runner.
+        # `find` without -L lists every real entry of the checkout, so a link
+        # reached through a symlinked directory is also an entry somewhere in
+        # the checkout and gets checked. Runs before any AWS credentials exist.
+        run: |
+          set -euo pipefail
+          root="$(realpath "${GITHUB_WORKSPACE}")"
+          bad=0
+          while IFS= read -r -d '' link; do
+            target="$(realpath -m "$link")"
+            case "$target" in
+              "$root"|"$root"/*) ;;
+              *) echo "::error::${link#"$root"/} is a symlink that leads outside the checkout."; bad=1 ;;
+            esac
+          done < <(find "$root" -type l -print0)
+          exit "$bad"
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -274,27 +296,32 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Generate TechDocs (no Docker)
-        run: techdocs-cli generate --no-docker --verbose
+        # Write to the build directory that is checked and published below
+        # (the CLI default is ./site).
+        run: techdocs-cli generate --no-docker --verbose --output-dir "./${BUILD_DIR}"
 
-      - name: Refuse symlinks that lead outside the checkout
-        # The publisher uploads what it finds under the build directory. If
-        # that directory, or an entry in it, is a symlink to a path outside
-        # the checkout, files from elsewhere on the runner would be uploaded.
+      - name: Refuse symlinks that lead outside the checkout (after generation)
+        # Same check again, for links the generation may have created, plus
+        # the build directory must exist inside the checkout.
         run: |
           set -euo pipefail
           root="$(realpath "${GITHUB_WORKSPACE}")"
-          inside() { case "$1" in "$root"|"$root"/*) return 0 ;; *) return 1 ;; esac; }
-          if ! dir="$(realpath -e "./${BUILD_DIR}")" || ! inside "$dir"; then
-            echo "::error::The build directory ${BUILD_DIR} does not exist or is outside the checkout."
+          case "$(realpath -m "./${BUILD_DIR}")" in
+            "$root"/*) ;;
+            *) echo "::error::The build directory ${BUILD_DIR} is outside the checkout."; exit 1 ;;
+          esac
+          if ! [ -d "./${BUILD_DIR}" ]; then
+            echo "::error::The build directory ${BUILD_DIR} does not exist after generation."
             exit 1
           fi
           bad=0
           while IFS= read -r -d '' link; do
-            if ! target="$(realpath -e "$link")" || ! inside "$target"; then
-              echo "::error::${link} is a symlink that leads outside the checkout (or nowhere)."
-              bad=1
-            fi
-          done < <(find "./${BUILD_DIR}/" -type l -print0)
+            target="$(realpath -m "$link")"
+            case "$target" in
+              "$root"|"$root"/*) ;;
+              *) echo "::error::${link#"$root"/} is a symlink that leads outside the checkout."; bad=1 ;;
+            esac
+          done < <(find "$root" -type l -print0)
           exit "$bad"
 
       - name: Publish to S3
