@@ -23,6 +23,21 @@
   `push:` trigger of the caller list that branch.
 - Delegates to `reusable-backstage-techdocs.yml@v1` with safe defaults for AWS
   region, environment, and tool versions.
+- The reusable workflow accepts only plain version strings for the tools it
+  installs, because they are installed in the job that holds the publisher's
+  AWS role. It stops with an error, before the checkout, if a value (input or
+  the matching variable) does not match:
+
+  | Input (variable) | Default | Accepted |
+  | --- | --- | --- |
+  | `techdocs_cli_version` (`TECHDOCS_CLI_VERSION`) | `latest` | a semver version or range (`1.9.0`, `^1.9.0`, `~1.9`, `1.x`) or a dist-tag (`latest`, `next`) |
+  | `mkdocs_core_version` (`MKDOCS_TECHDOCS_CORE_VERSION`) | `>=1.6,<2.0` | comma-separated pip version specifiers (`>=1.6,<2.0`, `==1.6.1`, `~=1.6`) |
+  | `node_version` (`TECHDOCS_NODE_VERSION`) | `24` | a Node.js version (`24`, `24.1.0`, `24.x`, `lts/*`) |
+  | `python_version` (`TECHDOCS_PYTHON_VERSION`) | `3.13` | a Python version (`3.13`, `3.13.1`, `3.x`, `pypy3.10`) |
+  | `build_directory` (`TECHDOCS_BUILD_DIR`) | `site` | a relative directory inside the checkout (`site`, `build/site`), no `..` and no leading `/` |
+
+  Git, URL, file and alias specs (`github:owner/repo`, `npm:other@1`,
+  `file:...`, ` @ https://...`), pip extras and markers are refused.
 - Uses `TECHDOCS_AWS_ACCOUNT_ID` of `geolonia/.github` repository secret by default;
   optional inputs allow setting a repo secret `AWS_ACCOUNT_ID` to override on a
   per-repo basis.
