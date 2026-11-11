@@ -5,7 +5,7 @@ on:
     inputs:
       # --- Common fields (all optional) ---
       tag:
-        description: "Tag/SHA to build docs from (defaults to current ref)"
+        description: "Tag/SHA to build docs from (defaults to current ref). Must be on the default branch."
         required: false
         type: string
       environment:
@@ -101,6 +101,30 @@ jobs:
           # the checkout git credentials are never reused, so drop them
           # (zizmor artipacked).
           persist-credentials: false
+
+      - name: Refuse a commit that is not on the default branch
+        # The publish below overwrites the live docs, and the publisher role
+        # trusts every ref of the org's repositories. A manual run
+        # (workflow_dispatch) can start on any branch and `tag` can name any
+        # commit, so stop here, before anything from the checkout runs and
+        # before any AWS credentials exist, unless the checked-out commit is
+        # already on the default branch (the tip or an ancestor of it).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${default_branch}...${sha}?per_page=1" --jq .status)"
+          case "$status" in
+            identical|behind)
+              echo "Commit ${sha} is on ${default_branch}; publishing."
+              ;;
+            *)
+              echo "::error::Commit ${sha} is not on the default branch ${default_branch} (compare status: ${status}). TechDocs are published only from merged commits; merge first, then run the workflow on ${default_branch}."
+              exit 1
+              ;;
+          esac
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
