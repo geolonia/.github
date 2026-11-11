@@ -93,6 +93,63 @@ jobs:
       contents: read
 
     steps:
+      - name: Validate tool versions and build directory
+        # These values come from the caller (inputs) or from variables, and
+        # reach `npm i -g`, `pip install`, the setup actions and the publish
+        # command. A git or URL spec (`github:owner/repo`, `file:...`,
+        # ` @ https://...`) would install code the caller chose, inside the
+        # job that holds the publisher's AWS role. Accept only plain version
+        # strings and a relative build directory, and fail closed otherwise.
+        # Runs first, before the checkout and before any install.
+        env:
+          # ASCII ranges in the checks below: in some UTF-8 locales [A-Za-z]
+          # also matches letters like é.
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          failed=0
+          check() {
+            # $1 = name shown in the error, $2 = value, $3 = pattern, $4 = hint
+            if ! [[ "$2" =~ $3 ]]; then
+              echo "::error::$1 is not an accepted value. Allowed: $4."
+              failed=1
+            fi
+          }
+          # npm: a semver version or range (1.9.0, ^1.9.0, ~1.9, 1.x,
+          # '>=1.9.0 <2.0.0': comparators separated by single spaces) or a
+          # dist-tag of @techdocs/cli (latest, next). No ':' or '/', so no
+          # git, URL, file or alias specs.
+          npm_cmp='(>=|<=|>|<|=|~|\^)?[0-9]+(\.([0-9]+|[xX*])){0,2}(-[0-9A-Za-z.-]+)?'
+          npm_semver="^${npm_cmp}( ${npm_cmp})*\$"
+          npm_tag='^[A-Za-z][A-Za-z0-9._-]*$'
+          if ! [[ "$TECHDOCS_CLI_VER" =~ $npm_semver || "$TECHDOCS_CLI_VER" =~ $npm_tag ]]; then
+            echo "::error::techdocs_cli_version (or vars.TECHDOCS_CLI_VERSION) is not an accepted value. Allowed: a semver version or range like 1.9.0, ^1.9.0, 1.x or '>=1.9.0 <2.0.0', or a dist-tag like latest."
+            failed=1
+          fi
+          # pip: one or more comma-separated version specifiers
+          # (>=1.6,<2.0, ==1.6.1, ~=1.6). No direct references (' @ URL'),
+          # extras or markers.
+          pip_clause='(==|!=|<=|>=|<|>|~=) *[0-9]+(\.[0-9]+)*(\.\*)?((a|b|rc)[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?'
+          check "mkdocs_core_version (or vars.MKDOCS_TECHDOCS_CORE_VERSION)" "$MKDOCS_CORE_VER" \
+            "^ *${pip_clause}( *, *${pip_clause})* *\$" \
+            "pip version specifiers like >=1.6,<2.0 or ==1.6.1"
+          check "node_version (or vars.TECHDOCS_NODE_VERSION)" "$NODE_VERSION" \
+            '^(lts/([a-z]+|\*)|node|latest|current|[~^]?[0-9]+(\.([0-9]+|x|\*)){0,2}(-[0-9A-Za-z.-]+)?)$' \
+            "a Node.js version like 24, 24.1.0, 24.x or lts/*"
+          check "python_version (or vars.TECHDOCS_PYTHON_VERSION)" "$PYTHON_VERSION" \
+            '^((pypy|graalpy)-?)?[0-9]+(\.([0-9]+|x|\*)){0,2}t?(-[0-9A-Za-z.]+)?$' \
+            "a Python version like 3.13, 3.13.1, 3.x or pypy3.10"
+          # A relative path inside the checkout: no leading '/', and no
+          # segment starting with '.', which also rules out '..'. A leading
+          # './' and a trailing '/' are dropped first (./site and site/ mean
+          # site); the publish step uses "./${BUILD_DIR}", where both still work.
+          build_dir="${BUILD_DIR#./}"
+          build_dir="${build_dir%/}"
+          check "build_directory (or vars.TECHDOCS_BUILD_DIR)" "$build_dir" \
+            '^[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*$' \
+            "a relative directory like site or build/site (letters, digits, '.', '_', '-', no '..')"
+          exit "$failed"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -210,6 +267,28 @@ jobs:
           echo "Using TECHDOCS_ENTITY=${ENTITY}"
           echo "TECHDOCS_ENTITY=${ENTITY}" >> "$GITHUB_ENV"
 
+      - name: Refuse symlinks that lead outside the checkout (before generation)
+        # MkDocs copies a symlinked source file into the site as a regular
+        # file, and cleans the output directory before writing to it. A
+        # symlink in the checkout that leads outside it (a source page, the
+        # build directory itself, or a link inside a symlinked directory)
+        # would copy, delete or upload files from elsewhere on the runner.
+        # `find` without -L lists every real entry of the checkout, so a link
+        # reached through a symlinked directory is also an entry somewhere in
+        # the checkout and gets checked. Runs before any AWS credentials exist.
+        run: |
+          set -euo pipefail
+          root="$(realpath "${GITHUB_WORKSPACE}")"
+          bad=0
+          while IFS= read -r -d '' link; do
+            target="$(realpath -m "$link")"
+            case "$target" in
+              "$root"|"$root"/*) ;;
+              *) echo "::error::${link#"$root"/} is a symlink that leads outside the checkout."; bad=1 ;;
+            esac
+          done < <(find "$root" -type l -print0)
+          exit "$bad"
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -217,7 +296,33 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Generate TechDocs (no Docker)
-        run: techdocs-cli generate --no-docker --verbose
+        # Write to the build directory that is checked and published below
+        # (the CLI default is ./site).
+        run: techdocs-cli generate --no-docker --verbose --output-dir "./${BUILD_DIR}"
+
+      - name: Refuse symlinks that lead outside the checkout (after generation)
+        # Same check again, for links the generation may have created, plus
+        # the build directory must exist inside the checkout.
+        run: |
+          set -euo pipefail
+          root="$(realpath "${GITHUB_WORKSPACE}")"
+          case "$(realpath -m "./${BUILD_DIR}")" in
+            "$root"/*) ;;
+            *) echo "::error::The build directory ${BUILD_DIR} is outside the checkout."; exit 1 ;;
+          esac
+          if ! [ -d "./${BUILD_DIR}" ]; then
+            echo "::error::The build directory ${BUILD_DIR} does not exist after generation."
+            exit 1
+          fi
+          bad=0
+          while IFS= read -r -d '' link; do
+            target="$(realpath -m "$link")"
+            case "$target" in
+              "$root"|"$root"/*) ;;
+              *) echo "::error::${link#"$root"/} is a symlink that leads outside the checkout."; bad=1 ;;
+            esac
+          done < <(find "$root" -type l -print0)
+          exit "$bad"
 
       - name: Publish to S3
         run: |
