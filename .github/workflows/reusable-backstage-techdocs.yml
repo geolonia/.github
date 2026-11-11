@@ -132,7 +132,12 @@ jobs:
           else
             branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
           fi
-          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${branch}...${sha}?per_page=1" --jq .status)"
+          # `heads/` makes the base a branch: a bare name could also match a
+          # tag of the same name, which anyone with write access can push.
+          if ! status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/heads/${branch}...${sha}?per_page=1" --jq .status)"; then
+            echo "::error::Could not compare commit ${sha} with branch ${branch}. Does the branch exist? Check the repository variable TECHDOCS_PUBLISH_BRANCH."
+            exit 1
+          fi
           case "$status" in
             identical|behind)
               echo "Commit ${sha} is on ${branch}; publishing."

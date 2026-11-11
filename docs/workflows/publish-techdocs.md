@@ -15,7 +15,12 @@
   Actions, Variables). Without it, every publish from `main` fails with
   "not on the publish branch", because `main` is ahead of `develop`. It is a
   variable and not an input, because only repository admins can change
-  variables.
+  variables. Set it on the repository, not on the organization (it would apply
+  to every repository) and not on an environment (the template's dispatch
+  guard does not see environment variables). The check is only as strong as
+  the protection of that branch: it must require pull requests, as the org
+  ruleset does for the default branch, `main` and `master`. Also make the
+  `push:` trigger of the caller list that branch.
 - Delegates to `reusable-backstage-techdocs.yml@v1` with safe defaults for AWS
   region, environment, and tool versions.
 - Uses `TECHDOCS_AWS_ACCOUNT_ID` of `geolonia/.github` repository secret by default;
