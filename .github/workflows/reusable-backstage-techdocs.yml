@@ -218,7 +218,7 @@ jobs:
         run: npm i -g "@techdocs/cli@${TECHDOCS_CLI_VER}"
 
       - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -230,7 +230,7 @@ jobs:
 
       - name: Resolve TechDocs entity from catalog-info.yaml (fallback)
         id: techdocs_entity_yaml
-        uses: mikefarah/yq@504fc38780cc46be8444ea1b72fb55919fc0bfb0 # v4.54.1
+        uses: mikefarah/yq@a4330671f17776618660a419ab2531e4f4dc48b6 # v4.54.2
         with:
             # result: "namespace/kind/name" (e.g. "geolonia/component/my-service")
             cmd: yq -r 'select(.kind == "Component") | [.metadata.namespace // "default", (.kind // "Component" | downcase), .metadata.name] | join("/")' catalog-info.yaml
