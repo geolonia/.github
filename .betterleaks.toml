@@ -42,8 +42,10 @@ description = "GitHub App installation token (incl. Actions GITHUB_TOKEN) in the
 # Since 2026-04-27 GitHub issues installation tokens as a ghs_-prefixed JWT
 # of about 520 characters with two dots:
 # https://docs.github.com/rest/apps/apps#create-an-installation-access-token-for-an-app
-# The built-in github-app-token rule only matches the old 40-character form,
-# ghs_ followed by 36 alphanumerics, and misses these.
+# The built-in github-app-token rule looks for the old 40-character form,
+# ghs_ followed by 36 alphanumerics. It misses the ghs_<appid>_<jwt> shape
+# and catches the others only by chance, when the first segment happens to
+# hold 36 alphanumerics. A token that both rules match is reported twice.
 # Segment minimums keep short ghs_ fixtures such as "ghs_test" out.
 # Remove once betterleaks ships a rule for this format:
 # https://github.com/betterleaks/betterleaks/issues/107
