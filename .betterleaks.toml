@@ -14,10 +14,14 @@
 #   * A repo overrides everything by committing its own .betterleaks.toml.
 #
 # Editing rules:
-#   * Keep useDefault = true. This file holds ONLY universal, non-secret
-#     false-positive patterns: unmistakable documentation placeholders and
-#     generated build artifacts. Never allowlist a real secret; rotate and
-#     remove it instead.
+#   * Keep useDefault = true. Besides the [[rules]] described below, this file
+#     holds ONLY universal, non-secret false-positive patterns: unmistakable
+#     documentation placeholders and generated build artifacts. Never
+#     allowlist a real secret; rotate and remove it instead.
+#   * [[rules]] here only fill a gap in the built-in detectors (a credential
+#     format the default rules do not match yet). Each one says which upstream
+#     change makes it unnecessary; remove it once the pinned betterleaks
+#     version ships that change.
 #   * Do NOT add project-specific token exceptions here, not even public,
 #     client-side tokens (for example a Mapbox pk. token). Those are a
 #     repo-level decision: the owning repo commits its own .betterleaks.toml so
@@ -31,6 +35,20 @@ title = "Geolonia organization betterleaks baseline"
 
 [extend]
 useDefault = true
+
+[[rules]]
+id = "github-app-token-stateless"
+description = "GitHub App installation token (incl. Actions GITHUB_TOKEN) in the stateless JWT format"
+# Since 2026-04-27 GitHub issues installation tokens as a ghs_-prefixed JWT
+# of about 520 characters with two dots:
+# https://docs.github.com/rest/apps/apps#create-an-installation-access-token-for-an-app
+# The built-in github-app-token rule only matches the old 40-character form,
+# ghs_ followed by 36 alphanumerics, and misses these.
+# Segment minimums keep short ghs_ fixtures such as "ghs_test" out.
+# Remove once betterleaks ships a rule for this format:
+# https://github.com/betterleaks/betterleaks/issues/107
+regex = '''ghs_[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}'''
+keywords = ["ghs_"]
 
 [[allowlists]]
 description = "YOUR_API_KEY / YOUR-API-KEY / YOUR_TOKEN family (API docs templates)"
